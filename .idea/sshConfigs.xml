@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="SshConfigs">
+    <configs>
+      <sshConfig authType="PASSWORD" host="phoenix.cs.huji.ac.il" id="34122171-9d98-45a5-b58d-544165133bac" port="22" nameFormat="DESCRIPTIVE" username="gal_passi" useOpenSSHConfig="true" />
+    </configs>
+  </component>
+</project>
