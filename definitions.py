@@ -17,7 +17,7 @@ MUTATION_PATH = pjoin(DB_PATH, MUTATIONS)
 
 #  URLs
 
-UNIPORT_URL = "http://www.uniprot.org/uniprot/"
+UNIPORT_URL = "https://www.uniprot.org/uniprot/"
 UNIPORT_QUERY_URL = "https://rest.uniprot.org/uniprotkb/search?"
 EBI_PDB_URL = "https://www.ebi.ac.uk/pdbe/api/pdb/entry/molecules/"
 PDB_DOWNLOAD_URL = "https://files.rcsb.org/download/"
@@ -26,6 +26,10 @@ ALPHAFOLD_PDB_URL = "https://alphafold.ebi.ac.uk/files/AF-{}-F1-model_v1.pdb"
 #  REQUESTS CONSTANTS
 
 TIMEOUT = 10.0
+WAIT_TIME = 1.0
+RETRIES = 10
+RETRY_STATUS_LIST = [429, 500, 502, 503, 504]
+DEFAULT_HEADER = "https://"
 
 #  AMINO ACIDS UTILS
 

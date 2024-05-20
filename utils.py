@@ -1,15 +1,16 @@
-#import multiprocessing, geneffect, firm
 import os
 import glob
 import warnings
-
 import Family
 import Patient
 import Protein
 import Mutation
 import Pair
+import requests
+from requests.adapters import HTTPAdapter, Retry
 
 ALPHAFOLD_PDB_URL = "https://alphafold.ebi.ac.uk/files/AF-{}-F1-model_v1.pdb"
+
 
 def print_if(verbose, thr, text):
     """
@@ -22,6 +23,7 @@ def print_if(verbose, thr, text):
     if verbose >= thr:
         print(text)
 
+
 def warn_if(verbose, thr, text):
     """
     print text if verbose > thr
@@ -33,7 +35,68 @@ def warn_if(verbose, thr, text):
     if verbose >= thr:
         warnings.warn(text)
 
-def make_fasta(path, name,seq):
+
+def create_session(header, retries=5, wait_time=0.5, status_forcelist=None):
+    """
+    Creates a session using pagination
+    :param header: str url header session eill apply to
+    :param retries: int number of retries on failure
+    :param wait_time: float time (sec) between attempts
+    :param status_forcelist: list HTTP status codes that we should force a retry on
+    :return: requests session
+    """
+    s = requests.Session()
+    retries = Retry(total=retries,
+                    backoff_factor=wait_time,
+                    status_forcelist=status_forcelist)
+
+    s.mount(header, HTTPAdapter(max_retries=retries))
+    return s
+
+
+def safe_get_request(session, url, timeout, verbose_level, warning_msg='connection failed', return_on_failure=None):
+    """
+    creates a user friendly request raises warning on ConnectionError but will not crush
+    verbose_level = 3 will return raw Error massage in warning
+    :param session: requests session obj
+    :param url: str url to query
+    :param timeout: float max time to wait for response
+    :param verbose_level: int
+    :param warning_msg: str msg to display on failure
+    :param return_on_failure: value to return upon exception
+    :return: response
+    """
+    try:
+        r = session.get(url, timeout=timeout)
+    except requests.exceptions.ConnectionError as e:
+        warn_if(verbose_level, 1, warning_msg)
+        warn_if(verbose_level, 3, f"{e}")
+        return return_on_failure
+    return r
+
+
+def safe_post_request(session, url, timeout, verbose_level, warning_msg='connection failed', return_on_failure=None):
+    """
+    creates a user friendly request raises warning on ConnectionError but will not crush
+    verbose_level = 3 will return raw Error massage in warning
+    :param session: requests session obj
+    :param url: str url to query
+    :param timeout: float max time to wait for response
+    :param verbose_level: int
+    :param warning_msg: str msg to display on failure
+    :param return_on_failure: value to return upon exception
+    :return: response
+    """
+    try:
+        r = session.post(url, timeout=timeout)
+    except requests.exceptions.ConnectionError as e:
+        warn_if(verbose_level, 1, warning_msg)
+        warn_if(verbose_level, 3, f"{e}")
+        return return_on_failure
+    return r
+
+
+def make_fasta(path, name, seq):
     full_path = os.path.join(path, f"{name}.fasta")
     with open(full_path, "w+") as file:
         file.write(f">{name}\n")
@@ -56,6 +119,7 @@ def generate_pairs(pairs):
         m1 = Mutation.Mutation(m1[1], m1[0])
         m2 = Mutation.Mutation(m2[1], m2[0])
         yield Pair.Pair(m1, m2)
+
 
 def generate_mutations(mutations):
     """
@@ -120,13 +184,14 @@ def all_but_one(patients):
     if len(patients) == 2:
         return set(patients[0].mutations()) | set(patients[1].mutations())
     for i in range(len(patients)):
-        cur_patients = patients[0:i] + patients[i+1:len(patients)]
+        cur_patients = patients[0:i] + patients[i + 1:len(patients)]
         sets = [set(p.mutations()) for p in cur_patients]
         final_set |= set.intersection(*sets)
     return final_set
 
 
-def recurring_family_mutations(families = ['HR1', 'HR3', 'HR4', 'HR5', 'HR6', 'HR7', 'HR8', 'HR9', 'HR10', 'HR11', 'HR12']):
+def recurring_family_mutations(
+        families=['HR1', 'HR3', 'HR4', 'HR5', 'HR6', 'HR7', 'HR8', 'HR9', 'HR10', 'HR11', 'HR12']):
     mult_rec = set()
     for i in range(len(families)):
         f1 = Family.Family(families[i])
@@ -147,18 +212,18 @@ def add_record(prot):
         data['firmScore'].append(details['firmScore'])
         if details['bertScore'] != -1:
             for i, score in enumerate(details['bertScore']):
-                data[f'bert_{i+1}'].append(score)
+                data[f'bert_{i + 1}'].append(score)
             data['bert_sum'].append(sum(list(details['bertScore'])))
             data['bert_max'].append(max(list(details['bertScore'])))
         else:
-            for i in range(1,6):
+            for i in range(1, 6):
                 data[f'bert_{i}'].append(-1)
             data['bert_sum'].append(-1)
             data['bert_max'].append(-1)
         data['mentioned'].append(str(Analyze.ProteinAnalyzer.search_litriture(prot.name)))
 
 
-def find_mutations_with_pdbs(protein, log = "log.txt", found = 'found.txt'):
+def find_mutations_with_pdbs(protein, log="log.txt", found='found.txt'):
     """
     iterates ove protein mutations to find those with pdbs
     :param protein: protein object
@@ -192,7 +257,6 @@ def all_mutations():
         yield utils.create_mutation(mut_name)
 
 
-#TODO there is a problem with firm setup might not be compatiable with newer version of Bio. maybe need to update firm
 '''
 def _firm_setup(ref_gen='GRCh37', n_threads=4):
     """

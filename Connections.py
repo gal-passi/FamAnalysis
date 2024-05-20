@@ -1,9 +1,9 @@
-import requests as req
 from Bio import Entrez, PDB, SeqIO
 from urllib.error import HTTPError as HTTPError
 import re
 from definitions import *
-from utils import print_if, warn_if
+from utils import print_if, warn_if, create_session, safe_post_request, safe_get_request
+
 
 
 
@@ -30,9 +30,13 @@ class Uniport:
         if not Uid: return ''
         sequences = {}
         index = 1
+        s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
         while True:
             currentUrl = f"{UNIPORT_URL}{Uid}-{index}.fasta"
-            response = req.post(currentUrl, timeout=TIMEOUT)
+            response = safe_post_request(s, currentUrl, TIMEOUT, self._v,
+                                         f"exits early - connection error on {currentUrl}")
+            if not response:
+                return sequences
             seq = response.text
             if not response.ok:
                 print_if(self._v, 3, "done")
@@ -61,7 +65,10 @@ class Uniport:
             query = UNIPORT_QUERY_URL + \
                     f"fields=id&format=tsv&query={unique_key}+AND+organism_id:9606"
 
-        r = req.get(query, timeout=TIMEOUT)
+        s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
+        r = safe_get_request(s, query, TIMEOUT, self._v, f"expand_isoforms failed on {prot.name} - couldn't fetch Uids")
+        if not r:
+            return {}
         if r.text == '':
             return {}
         uids = r.text.split("\n")
@@ -97,23 +104,28 @@ class Uniport:
             return {}
 
         #params = {'format': 'tab', 'query': 'ID:{}'.format(Uid), 'columns': 'id,database(PDB)'}
+        s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
         query = UNIPORT_QUERY_URL + \
                 f"fields=id,xref_pdb&format=tsv&query={Uid}"
         print_if(self._v, 3, f"Fetching Pdb ids for {Uid}...")
-        r = req.get(query, timeout=TIMEOUT)
+        r = safe_get_request(s, query, TIMEOUT, self._v,
+                             f"exception fetching pdb ids for {Uid}\nreturning empty...")
+        if not r:
+            return {}
         print_if(self._v, 3, f"done")
         pdbs = str(r.text).splitlines()[-1].split('\t')[-1].split(';')[:-1]
         print_if(self._v, 3, f"Fetching pdbs sequences...")
-        try:
-            delta = len(pdbs) / 2  # for proteins with many pdbs default timeout might not be enough
-            ret = {id: req.get(EBI_PDB_URL + f'{id}', timeout=TIMEOUT + delta).json()[id.lower()][0]['sequence']
-                   for id in pdbs}
+        delta = len(pdbs) / 2  # for proteins with many pdbs default timeout might not be enough
+        ret = {}
+        # ret = {id: s.get(EBI_PDB_URL + f'{id}', timeout=TIMEOUT + delta).json()[id.lower()][0]['sequence']
+        #      for id in pdbs}
+        for id in pdbs:
+            url = EBI_PDB_URL + f'{id}'
+            value = safe_get_request(s, url, TIMEOUT + delta, f"skipping pdb-{id} for {Uid} - Connection Failure")
+            if not value:
+                continue
+            ret[id] = value.json()[id.lower()][0]['sequence']
             print_if(self._v, 3, f"done")
-        except Exception as e:
-            warn_if(self._v, 2, f"exception on fetch_uniport with {Uid} -> {pdbs}\nreturning empty...")
-            warn_if(self._v, 3, f"exception on fetch_uniport with {Uid} -> {pdbs}\nreturning empty...\n{e}")
-            ret = {}
-
         return ret
 
     def uid_from_name(self, name, all=False, reviewed=True):
@@ -133,7 +145,12 @@ class Uniport:
             query = UNIPORT_QUERY_URL + \
                     f"fields=&id&format=tsv&query={name}+AND+organism_id:9606+AND+reviewed:false"
             #params = {'format': 'tab', 'query': f"gene_exact:{name} AND organism:homo_sapiens", 'columns': 'id'}
-        r = req.get(query, timeout=TIMEOUT)
+        s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
+        #r = req.get(query, timeout=TIMEOUT)
+        r = safe_get_request(s, query, TIMEOUT, self._v,
+                             f"uid_from_name failed connection on {name}...returning empty")
+        if not r:
+            return []
         if r.text == '':
                 return []
         rows = r.text.split('\n')
@@ -155,7 +172,12 @@ class Uniport:
 
         name = ref_name if ref_name else protein.name
         url = f"https://rest.uniprot.org/uniprotkb/search?fields=&gene&format=tsv&query={name}+AND+organism_id:9606"
-        r = req.get(url, timeout=TIMEOUT)
+        s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
+        #r = req.get(url, timeout=TIMEOUT)
+        r = safe_get_request(s, url, TIMEOUT, self._v,
+                             f"Connection failure on entery_name on {name}")
+        if not r:
+            return ''
         if r.text == '':
             return ''
         rows = r.text.split('\n')
@@ -173,7 +195,12 @@ class Uniport:
             return []
         search_term = protein.Uid if protein else by_name
         url = f"https://rest.uniprot.org/uniprotkb/search?fields=&gene&format=tsv&query={search_term}"
-        r = req.get(url, timeout=TIMEOUT)
+        s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
+        #r = req.get(url, timeout=TIMEOUT)
+        r = safe_get_request(s, url, TIMEOUT, self._v,
+                             f"Connection failure on synonms on {search_term}")
+        if not r:
+            return ''
         if r.text == '':
             return []
         res = []
@@ -222,7 +249,12 @@ class Uniport:
         """
         returns confidence of alphafold model - if unable to find or model or sequences don't match return -1
         """
-        resp = req.get(ALPHAFOLD_PDB_URL.format(prot.Uid), timeout=TIMEOUT)
+        s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
+        #resp = req.get(ALPHAFOLD_PDB_URL.format(prot.Uid), timeout=TIMEOUT)
+        resp = safe_get_request(s, ALPHAFOLD_PDB_URL.format(prot.Uid), TIMEOUT, self._v,
+                             f"Failed to find alphafold model for {prot.Uid} - Connection Failure")
+        if not resp:
+            return -1
         if not resp.ok:
             warn_if(self._v, 2, f"Failed to find alphafold model for {prot.Uid}")
             return -1
@@ -248,7 +280,12 @@ class Uniport:
         return relavent_confidence[0]
 
     def alpha_seq(self, prot):
-        resp = req.get(ALPHAFOLD_PDB_URL.format(prot.Uid), timeout=TIMEOUT)
+        s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
+        #resp = req.get(ALPHAFOLD_PDB_URL.format(prot.Uid), timeout=TIMEOUT)
+        resp = safe_get_request(s, ALPHAFOLD_PDB_URL.format(prot.Uid), TIMEOUT, self._v,
+                                f"Failed to find alphafold sequence for {prot.Uid} - Connection Failure")
+        if not resp:
+            return ''
         if not resp.ok:
             return ''
         return self._obtain_seq(resp)

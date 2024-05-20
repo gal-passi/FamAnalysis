@@ -23,7 +23,7 @@ def create_parser():
     parser.add_argument(
         "--action",
         type=str,
-        choices=["init-DB", "update-DB" "score-ESM", "score-EVE", "score-AFM"],
+        choices=["init-DB", "update-DB", "delete-DB", "score-ESM", "score-EVE", "score-AFM"],
         default="init-DB",
         help="init-DB: initialize project database according to the supplied in the csv file\n"
              "update-DB: update project database according to the supplied in the csv file\n"
@@ -114,10 +114,11 @@ def create_parser():
         choices=[0, 1, 2, 3],
         default=1,
         help="level of description (2-3 not recommended with workers > 1) : \n"
-             "0 - Only warnings and errors will be printed\n"
+             "0 - Only major errors will be printed no progress information will be printed\n"
              "1 - default, program progress information and warnings will be printed\n"
              "2 - high level process and warnings i.e. protein being created\n"
-             "3 - low level process information and detaled errors i.e. detailed steps of protein creation, mutation creation etc...\n"
+             "3 - low level process information and raw errors messages i.e. detailed steps of protein creation, "
+             "mutation creation etc...\n "
     )
 
     return parser
@@ -134,13 +135,15 @@ def create_new_records(args, *rowiters):
     rows = [t[1] for t in rowiters]
     rowiter = zip(idxs, rows)
     skipped = []
+    created_protein = None
     for idx, row in rowiter:
         gene = row[args.protein_col]
         mut_desc = row[args.variant_col]
         dna = {'chr': row[args.chromosome_col], 'start': row[args.dna_start_col], 'end': row[args.dna_end_col],
                'ref_na': row[args.wt_col], 'alt_na': row[args.alt_col]}
         try:
-            protein = Protein(ref_name=gene, verbose_level=args.verbose)
+            protein = Protein(ref_name=gene, verbose_level=args.verbose) if not created_protein else created_protein
+            created_protein = protein
             protein.add_mut(mut_desc, dna)
         except TimeoutError:
             print_if(args.verbose, 2, f"skipped {gene} due to timeout")
@@ -151,7 +154,7 @@ def create_new_records(args, *rowiters):
 
 
 
-def build_db(args, target, chunk_size = 40):
+def build_db(args, target):
     skipped = []
     df = pd.read_csv(args.data_path)
     workers = args.workers if args.workers else cpu_count()
@@ -167,7 +170,7 @@ def build_db(args, target, chunk_size = 40):
     repeating_proteins = repeating_rows[args.protein_col].unique()
     tasks_repeating = [values_iter(value, repeating_rows) for value in repeating_proteins]
 
-    tasks = tasks_repeating
+    tasks = tasks_repeating + tasks_unique
     print_if(args.verbose, 1,  f"running on {workers} Cpus")
     with Pool(workers) as p:
         for status in p.starmap(target, tasks):
