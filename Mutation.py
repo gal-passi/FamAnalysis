@@ -1,21 +1,21 @@
 import re
-import warnings
 import os
 import pickle
 import numpy as np
 import Analyze
 import Protein as P
+from definitions import *
+from utils import print_if, warn_if
 
 
 class Mutation:
     """
     This class stores all information about a given mutation
     """
-    MUTATION_DB = "DB/Mutations"
     A_A = "ACDEFGHIKLMNPQRSTVWXY"
     MUTATION_REGEX = rf'p\.(?P<symbol>(?P<orig>[{A_A}]){{1}}(?P<location>[\d]+)(?P<change>[{A_A}]){{1}})'
 
-    def __init__(self, full_desc, protein, dna_data={}, load_only=False):
+    def __init__(self, full_desc, protein, dna_data={}, load_only=False, verbose_level=1):
         """
         :param full_desc: string must contain p.{AA}{location}{AA}
         :param protein: protein object to which the mutation belongs
@@ -33,11 +33,12 @@ class Mutation:
         self._pdbs = None  # initialized only upon request
         self._chr, self._start, self._end, self._orig_NA, self._change_NA  = 0, 0, 0, None, None
         self._interface = {}
+        self._v = verbose_level
         if not protein or not full_desc:
             raise ValueError("Usage: Mutation(full_desc, protein_name)")
 
         protein = P.Protein(ref_name = protein, load_only=load_only) if isinstance(protein, str) else protein
-        self._directory = os.path.join(self.MUTATION_DB, f"{protein.name}_{self.extract_name(full_desc)}.txt")
+        self._directory = os.path.join(MUTATION_PATH, f"{protein.name}_{self.extract_name(full_desc)}.txt")
         if not os.path.exists(self._directory):
             if load_only: raise NameError("Couldn't find mutation in load only mode")
             self._create_new_instance(full_desc, protein, dna_data)
@@ -91,12 +92,11 @@ class Mutation:
                 self._chr, self._start, self._end, self._orig_NA, self._change_NA = \
                     data['chr'], data['start'], data['end'], data['ref_na'], data['alt_na']
             except KeyError:
-                warnings.warn("Incomplete data supplied: data should contain the keys: chr, start, end\n"
+               warn_if(self._v, 2, "Incomplete data supplied: data should contain the keys: chr, start, end\n"
                               "the following properties were set to -1: chr, start, end")
-                self._chr, self._start, self._end = -1, -1, -1
+               self._chr, self._start, self._end = -1, -1, -1
 
         self._protein = protein
-        #self._interface = self.calc_interface()
         self._save_obj(self._directory)
 
     def _save_obj(self, path):
@@ -129,11 +129,11 @@ class Mutation:
         """
         check the input is compatible with Mutation object constructor
         :param description:
-        :return: re.search obj if successful else exits with warning
+        :return: re.search obj if successful else raise ValueError
         """
         res = re.search(self.MUTATION_REGEX, description)
         if not res:
-            raise ValueError("Invalid constructor input must contain must contain p.{AA}{location}{AA}")
+            raise ValueError("Invalid input valid format of form p.{AA}{location}{AA}")
         return res
 
     @property
@@ -304,7 +304,9 @@ class Mutation:
         try:
             return self._protein.muts[self.extended_description]['eveScore']
         except:
-            print(self._protein.muts)
+            warn_if(self._v, 2, f"eveScore not initialized for mutation - try to add mutation again")
+            warn_if(self._v, 3, f"eveScore not initialized for mutation - try to add mutation again\n{self._protein.muts}")
+            return -1
 
     @property
     def has_eve(self):
@@ -349,7 +351,6 @@ class Mutation:
         """
         scores = self._protein.muts[self.extended_description]['bertScore']
         if not scores or type(scores) != tuple:
-            #print(f"{self.long_name} - {scores}")
             return 0
         if how == 'all':
             return scores
@@ -479,4 +480,3 @@ class Mutation:
         print(f"proteins pdbs:          {list(self.protein.pdbs.keys())}")
         print(f"alphafold conf:         {self.alph_conf}")
         print(f"known interactions:     {self.protein.interactions}")
-

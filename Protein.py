@@ -3,10 +3,12 @@ import json
 import pickle
 import re
 from datetime import datetime
-import warnings
 import Mutation
 import Analyze
 from Connections import Uniport
+from definitions import *
+from utils import print_if, warn_if
+
 
 PATH = r"sequence.txt"
 PAD = 6
@@ -16,7 +18,6 @@ class Protein:
     """
     This class creates and retrieves local proteins DBs
     """
-    PROTEIN_DB = "DB/proteins"
     MAIN_SEQ = "sequence.txt"
     ISOFORMS = "isoforms.txt"
     UIDS = "uids.txt"
@@ -24,10 +25,8 @@ class Protein:
     MUTS = "Mutations.txt"
     REF_SEQ = "reference.txt"
     BACKUP_PATH = "backup.txt"
-    UNIPORT_URL = "http://www.uniprot.org/uniprot/"
-    UNIQUE_NAMES = {'LOC100287896': 'LIPT2', 'FPGT-TNNI3K': 'TNNI3K', 'ATPSJ2-PTCD1': 'PTCD1', 'CCL4L1': 'CCL4L2', 'PTGDR2': 'CCDC86'}
 
-    def __init__(self, free_text='', ref_name='', uniport_id="", ncbi="", load_only=False):
+    def __init__(self, free_text='', ref_name='', uniport_id="", ncbi="", load_only=False, verbose_level=1):
         """
         Constructor for Protein Class. Must either contain free_text or ref_name
         :param free_text: optional initialization using free text i.e. LRRK2:NM_198578.1:exon48:c.G7134C:p.K2378N
@@ -40,7 +39,8 @@ class Protein:
             raise ValueError("ERROR: Class initialization must contain either protein reference name "
                              "or free description text\n" "USAGE: Protein('CUL7') | "
                              "Protein('CUL7:NM_001168370:exon25:c.G4970A:p.R1657Q')")
-        self._unip = Uniport()
+        self._v = verbose_level
+        self._unip = Uniport(verbose_level=verbose_level)
         if free_text != '':
             data = re.search(rf'([A-Z\d]*):(NM_[\d]*)[\.]?[\d]*:', free_text)
             ref_name = data.group(1) if data is not None else ref_name
@@ -54,22 +54,20 @@ class Protein:
         if ref_name == '' and not uniport_id:
             raise ValueError("ERROR: Unable to extract protein reference name, check input\n"
                              "USAGE: Protein('CUL7') | Protein('CUL7:NM_001168370:exon25:c.G4970A:p.R1657Q')")
-        self.ncbi_id = ncbi  #TODO not implemented well not sure if even needed
-        ref_name = self.UNIQUE_NAMES[ref_name] if ref_name in self.UNIQUE_NAMES else ref_name
-        self._name, self.directory = ref_name, os.path.join(self.PROTEIN_DB, ref_name)
+        self.ncbi_id = ncbi
+        ref_name = PROTEIN_ALIASES[ref_name] if ref_name in PROTEIN_ALIASES else ref_name
+        self._name, self.directory = ref_name, os.path.join(PROTEIN_PATH, ref_name)
         if not os.path.exists(self.directory):
             if not load_only:
-                print(f"Creating new protein {ref_name}:")
+                print_if(self._v, 2, f"Creating new protein {ref_name}:")
                 self.create_new_entity(uniport_id)
             else:
                 raise NameError("Couldn't find protein in load only mode")
 
         else:
+            print(f"Protein {ref_name} was loaded")
             self._Uids, self.isoforms, self.pdbs, self.muts = self.load_protein()
 
-        #TODO this data should be saved and loaded not re-calculated
-        #self.known_oncogene, self.mentioned_in = Analyze.ProteinAnalyzer.search_litriture(self.name)
-        #self.evemodel = Analyze.ProteinAnalyzer.search_eve_record(self.Uid)
 
     def __hash__(self):
         return hash(self.name)
@@ -132,11 +130,11 @@ class Protein:
     def pdb_paths(self, mut):
         """
         return a dict of all pdbs relevent to the mut
-        :param mut: strin p.{AA}{location}{AA}
+        :param mut: string p.{AA}{location}{AA}
         :return: {isoform: [pdb_pathes]}
         """
         if mut not in self.muts:
-            print("Mutation not found please add mutation using the add_mut function and rerun")
+            print_if(self._v, 2, f"{mut} not found make sure {mut} is added to {self.name} using self.add_mut")
             return []
         return {iso: [os.path.join(self.directory, mut, pdb + ".ent") for pdb in self.muts[mut]["pdbs"][iso]]
                 for iso in self.muts[mut]["pdbs"]}
@@ -148,7 +146,6 @@ class Protein:
         :return:
         """
         return self._read_uids(), self._read_isoforms(), self._read_pdbs(), self._read_mutations()
-        #return self._read_isoforms(), self._read_pdbs(), self._read_mutations()
 
     def _read_uids(self):
         return self.read_file(os.path.join(self.directory, self.UIDS))
@@ -214,14 +211,14 @@ class Protein:
         with open(os.path.join(self.directory, self.UIDS), "w") as file:
             file.write(json.dumps(uids))
 
-        isoforms = self._unip.fetch_uniport_sequences(self.Uid) #TODO might want to expend isoform selection
+        isoforms = self._unip.fetch_uniport_sequences(self.Uid)
         ncbi = {} if not self.ncbi_id else self._unip.fatch_all_NCBIs(self.ncbi_id)
         isoforms = {**isoforms, **ncbi}
         self.isoforms = isoforms
         with open(os.path.join(self.directory, self.ISOFORMS), "w") as file:
             file.write(json.dumps(isoforms))
 
-        pdbs = self._unip.fetch_pdbs(prot=self, verbal=True)
+        pdbs = self._unip.fetch_pdbs(prot=self)
         self.pdbs = pdbs
         with open(os.path.join(self.directory, self.PDBS), "w") as file:
             file.write(json.dumps(pdbs))
@@ -268,16 +265,16 @@ class Protein:
         try:
             name = Mutation.Mutation.extract_name(description)
         except ValueError:
-            warnings.warn(f"Unable to find mutation in reference:\n{description}")
+            warn_if(self._v, 2, f"Unable to find mutation name in reference:\n{description}")
             return
 
         if name in self.muts:
             return
 
         try:
-            Mutation.Mutation(description, self, dna_data)  # check if given mutation is valid
+            Mutation.Mutation(description, self, dna_data, verbose_level=self._v)  # check if given mutation is valid
         except ValueError:
-            warnings.warn(f"Unable to find mutation in reference:\n{description}")
+            warn_if(self._v, 2, f"Unable to find mutation in reference:\n{description}")
             return
 
         data = {'chr': None, 'ref_na': None, 'alt_na': None, 'start': None, 'end': None, 'firmScore': -1.0,
@@ -290,13 +287,13 @@ class Protein:
                 data['start'] = dna_data['start']
                 data['end'] = dna_data['end']
             except KeyError:
-                warnings.warn(f"DNA data supplied in wrong format skipping:\n{dna_data}")
+                warn_if(self._v, 2, f"DNA data supplied for {description} in wrong format skipping:\n{dna_data}")
                 data = {'chr': None, 'ref_na': None, 'alt_na': None, 'start': None, 'end': None, 'firmScore': -1.0,
                         'eveScore': -1.0, 'bertScore': tuple(), 'evePrediction': -1.0}
 
         self.muts[name] = data
         self._update_DB(os.path.join(self.directory, self.MUTS), self.muts, mode='pickle')
-        print(f"added {description} to {self._name}")
+        print_if(self._v, 3, f"added {description} to {self._name}")
 
     def find_relevent_pdbs(self, reference_sequence):
         """
@@ -309,4 +306,3 @@ class Protein:
 
 
 
-#return {mutation: Mutation.Mutation(mutation, self) for mutation in mutations}

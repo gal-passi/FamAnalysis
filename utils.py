@@ -1,6 +1,8 @@
 #import multiprocessing, geneffect, firm
 import os
 import glob
+import warnings
+
 import Family
 import Patient
 import Protein
@@ -9,11 +11,34 @@ import Pair
 
 ALPHAFOLD_PDB_URL = "https://alphafold.ebi.ac.uk/files/AF-{}-F1-model_v1.pdb"
 
+def print_if(verbose, thr, text):
+    """
+    print text if verbose > thr
+    :param verbose: int
+    :param thr: int
+    :param text: str
+    :return:
+    """
+    if verbose >= thr:
+        print(text)
+
+def warn_if(verbose, thr, text):
+    """
+    print text if verbose > thr
+    :param verbose: int
+    :param thr: int
+    :param text: str
+    :return:
+    """
+    if verbose >= thr:
+        warnings.warn(text)
+
 def make_fasta(path, name,seq):
     full_path = os.path.join(path, f"{name}.fasta")
     with open(full_path, "w+") as file:
         file.write(f">{name}\n")
         file.write(f"{seq}\n")
+
 
 def generate_proteins(proteins):
     """
@@ -21,6 +46,7 @@ def generate_proteins(proteins):
     """
     for p_name in proteins:
         yield Protein.Protein(ref_name=p_name)
+
 
 def generate_pairs(pairs):
     """
@@ -37,6 +63,7 @@ def generate_mutations(mutations):
     """
     for m_name, p_name in mutations:
         yield Mutation.Mutation(m_name, p_name)
+
 
 def create_mutation(s):
     s = s.split("_")
@@ -73,11 +100,14 @@ def update_patients_ranks():
         patient._data['rank'] = ranks
         patient._data.to_csv(rf'DB/Patient/new/{p}')
 
+
 def download_af_pdb(id):
     pass
 
+
 def protein_exists(ref_name):
     return ref_name in set(os.listdir('DB/proteins'))
+
 
 def all_but_one(patients):
     """
@@ -95,6 +125,7 @@ def all_but_one(patients):
         final_set |= set.intersection(*sets)
     return final_set
 
+
 def recurring_family_mutations(families = ['HR1', 'HR3', 'HR4', 'HR5', 'HR6', 'HR7', 'HR8', 'HR9', 'HR10', 'HR11', 'HR12']):
     mult_rec = set()
     for i in range(len(families)):
@@ -103,6 +134,63 @@ def recurring_family_mutations(families = ['HR1', 'HR3', 'HR4', 'HR5', 'HR6', 'H
             f2 = Family.Family(id2)
             mult_rec |= f1.recurring & f2.recurring
     return mult_rec
+
+
+def add_record(prot):
+    if not prot.mutations:
+        return
+    for mut, details in prot.mutations.items():
+        data['name'].append(prot.name)
+        data['variant'].append(mut)
+        data['eveScore'].append(details['eveScore'])
+        data['evePrediction'].append(details['evePrediction'])
+        data['firmScore'].append(details['firmScore'])
+        if details['bertScore'] != -1:
+            for i, score in enumerate(details['bertScore']):
+                data[f'bert_{i+1}'].append(score)
+            data['bert_sum'].append(sum(list(details['bertScore'])))
+            data['bert_max'].append(max(list(details['bertScore'])))
+        else:
+            for i in range(1,6):
+                data[f'bert_{i}'].append(-1)
+            data['bert_sum'].append(-1)
+            data['bert_max'].append(-1)
+        data['mentioned'].append(str(Analyze.ProteinAnalyzer.search_litriture(prot.name)))
+
+
+def find_mutations_with_pdbs(protein, log = "log.txt", found = 'found.txt'):
+    """
+    iterates ove protein mutations to find those with pdbs
+    :param protein: protein object
+    :return: set (mutation names)
+    """
+    for mutation in protein.mutations:
+        mut_obj = Mutation.Mutation(mutation, protein)
+        if mut_obj.has_pdbs():
+            print(f"{protein.name} - {mut_obj.name} have pdbs {mut_obj.pdbs}")
+            with open(found, 'a') as file:
+                file.write(f"{protein.name} - {mut_obj.name} - {mut_obj.pdbs}\n")
+        else:
+            with open(log, 'a') as file:
+                file.write(f"{protein.name} - {mut_obj} - {mut_obj.pdbs}\n")
+
+
+def all_proteins():
+    """
+    :return: iterable of all Protein objects in DB
+    """
+    for path in glob.glob(os.path.join(PROTEIN_DB, '*')):
+        prot_name = os.path.basename(path)
+        yield Protein(ref_name=prot_name)
+
+
+def all_mutations():
+    for path in glob.glob(os.path.join(MUTATION_DB, '*')):
+        mut_name = os.path.basename(path)
+        if mut_name == 'desktop.ini':
+            continue
+        yield utils.create_mutation(mut_name)
+
 
 #TODO there is a problem with firm setup might not be compatiable with newer version of Bio. maybe need to update firm
 '''

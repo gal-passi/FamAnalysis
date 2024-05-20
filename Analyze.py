@@ -49,7 +49,7 @@ class ProteinAnalyzer:
     AA_TO_INDEX = {"A": 0, "C": 1, "D": 2, "E": 3, "F": 4, "G": 5, "H": 6, "I": 7, "K": 8, "L": 9, "M": 10,
                    "N": 11, "P": 12, "Q": 13, "R": 14, "S": 15, "T": 16, "V": 17, "W": 18, "Y": 19}
 
-    def __init__(self, *proteins):
+    def __init__(self, *proteins, verbose_level=1):
         self.proteins = {protein.name: protein for protein in proteins}
         # create a dict of known oncogenes for breast cancer. {source name:set(genes names)}
         self._cpt_ingene = set([Path(i).with_suffix('').stem for i in glob.glob(f'{self.CPT_DB_INGENE}*.csv*')])
@@ -71,7 +71,7 @@ class ProteinAnalyzer:
             self.eve_index = pickle.load(fp)
         with open(self.EVE_REVERSE_INDEX, "rb") as fp:
             self.eve_reverse_index = pickle.load(fp)
-        self._unip = Connections.Uniport()
+        self._unip = Connections.Uniport(verbose_level= verbose_level)
 
 
     def analyze_all_proteins(self):
