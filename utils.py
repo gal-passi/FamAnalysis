@@ -1,14 +1,19 @@
 import os
 import glob
 import warnings
-import Family
-import Patient
-import Protein
-import Mutation
-import Pair
+#import Family
+#import Patient
+#import Protein
+#import Mutation
+#import Pair
 import requests
 from requests.adapters import HTTPAdapter, Retry
 from definitions import *
+import sys
+import psutil
+import pandas as pd
+import gzip
+import shutil
 
 ALPHAFOLD_PDB_URL = "https://alphafold.ebi.ac.uk/files/AF-{}-F1-model_v1.pdb"
 
@@ -54,6 +59,10 @@ def create_session(header, retries=5, wait_time=0.5, status_forcelist=None):
     s.mount(header, HTTPAdapter(max_retries=retries))
     return s
 
+def progress_bar(current, total, width=80):
+  progress_message = "Downloading: %d%% [%d / %d] bytes" % (current / total * 100, current, total)
+  sys.stdout.write("\r" + progress_message)
+  sys.stdout.flush()
 
 def safe_get_request(session, url, timeout, verbose_level, warning_msg='connection failed', return_on_failure=None,
                      warning_thr=VERBOSE['thread_warnings'], raw_err_thr=VERBOSE['raw_warnings']):
@@ -109,6 +118,42 @@ def make_fasta(path, name, seq):
         file.write(f">{name}\n")
         file.write(f"{seq}\n")
 
+
+def adaptive_chunksize(rowsize, ram_usage = 0.5):
+    """
+    
+    :param rowsize: float size of dataframe row in bits
+    :param ram_usage: float [0,1] portion of available ram to use.
+    Note setting ram_usage = 1.0 may result in memory errors.
+    :return: int number of rows in chunk
+    """
+    available = psutil.virtual_memory().available * ram_usage
+    return available // rowsize
+
+def afm_iterator(chunksize, usecols=None):
+    """
+    :param chunksize: int
+    :param usecols: Sequence of Hashable or Callable, optional. Subset of columns to select,
+    :yields: DataFrame of size chuksize
+    """
+    for chunk in pd.read_csv(AFM_DATA_PATH, sep='\t', chunksize=chunksize,
+                             header=AFM_HEADER, usecols=usecols):
+        yield chunk
+
+def ugzip(path, outfile, chunksize):
+    """
+    unzips .gz file in chunks
+    :param path: str path to .gz file
+    :param outfile: str outfile path
+    :return:
+    """
+    chunksize = int(chunksize)
+    with gzip.open(path, 'rb') as f_in:
+        with open(outfile, 'wb') as f_out:
+            chunk = f_in.read(chunksize)
+            while chunk:
+                f_out.write(chunk)
+                chunk = f_in.read(chunksize)
 
 def generate_proteins(proteins):
     """

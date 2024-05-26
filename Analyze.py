@@ -6,17 +6,16 @@ from Bio import SeqIO
 import json
 import warnings
 import glob
-from pathlib import Path
 import pandas as pd
-import itertools
 import Mutation
 import pickle
-import utils
+from utils import adaptive_chunksize, make_fasta, afm_iterator
 import Connections
 from pathlib import Path
 import Patient
 import Family
 from copy import deepcopy
+from definitions import *
 
 
 ROOT = os.path.join(os.path.dirname(__file__))
@@ -390,6 +389,21 @@ class ProteinAnalyzer:
 
         df = df[df['mutant'] == desc][f'{"Transfer_EVE" if ingene else "Transfer_imputed_EVE"}']
         return -1 if len(df) == 0 else float(df)
+
+    def score_mutation_afm(self, mutation, offset, gz=False):
+        """
+        tries to give scores for mutation using AlphaMissense
+        :param mutation: Mutation object
+        :param offset: int offset for mutation index
+        :param gz: bool if true will unzip the data
+        :return: float AlphaMissense score if found else -1
+        """
+        with open(AFM_DIRECTORY_PATH, 'r') as file:
+            index = json.load(file)
+        chunksize = adaptive_chunksize(AFM_ROWSIZE, ram_usage=DEFAULT_RAM_USAGE)
+        for chunk in afm_iterator(chunksize):
+            pass
+
 
     @staticmethod
     def mutations_by_rank():

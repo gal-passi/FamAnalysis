@@ -15,13 +15,15 @@ VERBOSE = {'critical': 0, 'program_warning': 1, 'program_progress': 1,
 #  DIRECTORIES
 
 ROOT_DIR = dirname(abspath(__file__))
-DB = 'DB_TEST'
+DB = 'DB'
 DB_CHILDREN = ['AFM', 'CPT', 'EVE', 'Family', 'mutations', 'Patients', 'proteins']
+CHILDREN_INDEX = {child:i for i, child in enumerate(DB_CHILDREN)}
 DB_PATH = pjoin(ROOT_DIR, DB)
 PROTEINS = 'test_p'
 PROTEIN_PATH = pjoin(DB_PATH, PROTEINS)
 MUTATIONS = 'test_m'
 MUTATION_PATH = pjoin(DB_PATH, MUTATIONS)
+AFM_PATH = pjoin(DB_PATH, 'AFM')
 
 #  REQUESTS CONSTANTS
 
@@ -30,6 +32,10 @@ WAIT_TIME = 1.0
 RETRIES = 10
 RETRY_STATUS_LIST = [429, 500, 502, 503, 504]
 DEFAULT_HEADER = "https://"
+
+#  MEMORY CONSTANTS
+
+DEFAULT_RAM_USAGE = 0.65
 
 #  URLs
 
@@ -71,6 +77,16 @@ AA_SYN_REV = dict((v, k) for k, v in AA_SYN.items())
 PROTEIN_ALIASES = {'LOC100287896': 'LIPT2', 'FPGT-TNNI3K': 'TNNI3K', 'ATPSJ2-PTCD1': 'PTCD1', 'CCL4L1': 'CCL4L2',
                 'PTGDR2': 'CCDC86', '4-SEPT': 'SEPT4'}
 
-if __name__ == '__main__':
-    print(ROOT_DIR)
+#  ALPHA MISSENSE DATA
+
+AFM_PUBLIC_DATA = 'https://storage.googleapis.com/dm_alphamissense/AlphaMissense_aa_substitutions.tsv.gz'
+AFM_DATA = 'AlphaMissense_aa_substitutions.tsv'
+AFM_DATA_PATH = pjoin(AFM_PATH, AFM_DATA)
+AFM_DIRECTORY = 'index.json'
+AFM_DIRECTORY_PATH = pjoin(AFM_PATH, AFM_DIRECTORY)
+AFM_HEADER = 3
+AFM_ROWSIZE = 32.0
+AFM_UID_ROWSIZE = 8.0
+
+
 
