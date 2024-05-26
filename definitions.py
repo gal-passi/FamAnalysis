@@ -15,7 +15,8 @@ VERBOSE = {'critical': 0, 'program_warning': 1, 'program_progress': 1,
 #  DIRECTORIES
 
 ROOT_DIR = dirname(abspath(__file__))
-DB = 'DB'
+DB = 'DB_TEST'
+DB_CHILDREN = ['AFM', 'CPT', 'EVE', 'Family', 'mutations', 'Patients', 'proteins']
 DB_PATH = pjoin(ROOT_DIR, DB)
 PROTEINS = 'test_p'
 PROTEIN_PATH = pjoin(DB_PATH, PROTEINS)

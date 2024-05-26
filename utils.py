@@ -13,7 +13,7 @@ from definitions import *
 ALPHAFOLD_PDB_URL = "https://alphafold.ebi.ac.uk/files/AF-{}-F1-model_v1.pdb"
 
 
-def print_if(verbose, thr, text):
+def print_if(verbose: object, thr: object, text: object) -> object:
     """
     print text if verbose > thr
     :param verbose: int
