@@ -8,6 +8,7 @@ import Mutation
 import Pair
 import requests
 from requests.adapters import HTTPAdapter, Retry
+from definitions import *
 
 ALPHAFOLD_PDB_URL = "https://alphafold.ebi.ac.uk/files/AF-{}-F1-model_v1.pdb"
 
@@ -54,10 +55,13 @@ def create_session(header, retries=5, wait_time=0.5, status_forcelist=None):
     return s
 
 
-def safe_get_request(session, url, timeout, verbose_level, warning_msg='connection failed', return_on_failure=None):
+def safe_get_request(session, url, timeout, verbose_level, warning_msg='connection failed', return_on_failure=None,
+                     warning_thr=VERBOSE['thread_warnings'], raw_err_thr=VERBOSE['raw_warnings']):
     """
     creates a user friendly request raises warning on ConnectionError but will not crush
     verbose_level = 3 will return raw Error massage in warning
+    :param raw_err_thr: int threshold to print raw error messages
+    :param warning_thr: int threshold to print warning messages
     :param session: requests session obj
     :param url: str url to query
     :param timeout: float max time to wait for response
@@ -69,13 +73,14 @@ def safe_get_request(session, url, timeout, verbose_level, warning_msg='connecti
     try:
         r = session.get(url, timeout=timeout)
     except requests.exceptions.ConnectionError as e:
-        warn_if(verbose_level, 1, warning_msg)
-        warn_if(verbose_level, 3, f"{e}")
+        warn_if(verbose_level, warning_thr, warning_msg)
+        warn_if(verbose_level, raw_err_thr, f"{e}")
         return return_on_failure
     return r
 
 
-def safe_post_request(session, url, timeout, verbose_level, warning_msg='connection failed', return_on_failure=None):
+def safe_post_request(session, url, timeout, verbose_level, warning_msg='connection failed', return_on_failure=None,
+                      warning_thr=VERBOSE['thread_warnings'], raw_err_thr=VERBOSE['raw_warnings']):
     """
     creates a user friendly request raises warning on ConnectionError but will not crush
     verbose_level = 3 will return raw Error massage in warning
@@ -85,13 +90,15 @@ def safe_post_request(session, url, timeout, verbose_level, warning_msg='connect
     :param verbose_level: int
     :param warning_msg: str msg to display on failure
     :param return_on_failure: value to return upon exception
+    :param raw_err_thr: int threshold to print raw error messages
+    :param warning_thr: int threshold to print warning messages
     :return: response
     """
     try:
         r = session.post(url, timeout=timeout)
     except requests.exceptions.ConnectionError as e:
-        warn_if(verbose_level, 1, warning_msg)
-        warn_if(verbose_level, 3, f"{e}")
+        warn_if(verbose_level, warning_thr, warning_msg)
+        warn_if(verbose_level, raw_err_thr, f"{e}")
         return return_on_failure
     return r
 

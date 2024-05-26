@@ -92,7 +92,7 @@ class Mutation:
                 self._chr, self._start, self._end, self._orig_NA, self._change_NA = \
                     data['chr'], data['start'], data['end'], data['ref_na'], data['alt_na']
             except KeyError:
-               warn_if(self._v, 2, "Incomplete data supplied: data should contain the keys: chr, start, end\n"
+               warn_if(self._v, VERBOSE['thread_warnings'], "Incomplete data supplied: data should contain the keys: chr, start, end\n"
                               "the following properties were set to -1: chr, start, end")
                self._chr, self._start, self._end = -1, -1, -1
 
@@ -304,8 +304,8 @@ class Mutation:
         try:
             return self._protein.muts[self.extended_description]['eveScore']
         except:
-            warn_if(self._v, 2, f"eveScore not initialized for mutation - try to add mutation again")
-            warn_if(self._v, 3, f"eveScore not initialized for mutation - try to add mutation again\n{self._protein.muts}")
+            warn_if(self._v, VERBOSE['thread_warnings'], f"eveScore not initialized for mutation - try to add mutation again")
+            warn_if(self._v, VERBOSE['raw_warnings'], f"\n{self._protein.muts}")
             return -1
 
     @property

@@ -4,6 +4,13 @@ from os.path import join as pjoin
 #  CONTACT INFO CHANGE TO YOUR EMAIL
 
 CONTACT = "gal.passi@mail.huji.ac.il"
+HEADERS = {'User-Agent': 'Python {}'.format(CONTACT)}
+
+
+#  VERBOSE THRESHOLDS
+
+VERBOSE = {'critical': 0, 'program_warning': 1, 'program_progress': 1,
+           'thread_warnings': 2, 'thread_progress': 3, 'raw_warnings': 3}
 
 #  DIRECTORIES
 
@@ -15,6 +22,14 @@ PROTEIN_PATH = pjoin(DB_PATH, PROTEINS)
 MUTATIONS = 'test_m'
 MUTATION_PATH = pjoin(DB_PATH, MUTATIONS)
 
+#  REQUESTS CONSTANTS
+
+TIMEOUT = 10.0
+WAIT_TIME = 1.0
+RETRIES = 10
+RETRY_STATUS_LIST = [429, 500, 502, 503, 504]
+DEFAULT_HEADER = "https://"
+
 #  URLs
 
 UNIPORT_URL = "https://www.uniprot.org/uniprot/"
@@ -23,13 +38,25 @@ EBI_PDB_URL = "https://www.ebi.ac.uk/pdbe/api/pdb/entry/molecules/"
 PDB_DOWNLOAD_URL = "https://files.rcsb.org/download/"
 ALPHAFOLD_PDB_URL = "https://alphafold.ebi.ac.uk/files/AF-{}-F1-model_v1.pdb"
 
-#  REQUESTS CONSTANTS
+# QUERIES
 
-TIMEOUT = 10.0
-WAIT_TIME = 1.0
-RETRIES = 10
-RETRY_STATUS_LIST = [429, 500, 502, 503, 504]
-DEFAULT_HEADER = "https://"
+Q_ISOFORMS_PROT = "fields=id&format=tsv&query=gene_exact:{}+AND+organism_id:9606"
+Q_ISOFORMS_KEY = "fields=id&format=tsv&query={}+AND+organism_id:9606"
+Q_PDBS_UID = "fields=id,xref_pdb&format=tsv&query={}"
+#  first protein ref name, second true/false
+Q_UID_PROT = "fields=&id&format=tsv&query={}+AND+organism_id:9606+AND+reviewed:{}"
+Q_UNIP_ENTERY = "https://rest.uniprot.org/uniprotkb/search?fields=&gene&format=tsv&query={}+AND+organism_id:9606"
+Q_UNIP_ENTERY_ALIAS = "https://rest.uniprot.org/uniprotkb/search?fields=&gene&format=tsv&query={}"
+
+# ERRORS & WARNINGS
+
+CON_ERR_EI = "Connection Error in expand_isoforms failed to fetch Uniprot IDs for potein {}"
+CON_ERR_FP_1 = "Connection Error in fetch_pdbs for unable to fetch pdbs for Uniprot id: {}\nreturning empty..."
+CON_ERR_FP_2 = "Connection Error in fetch_pdbs skipping pdb id {} for Uniprot id {}"
+CON_ERR_UFN = "Connection Error in uid_from_name failed to fetch Uniprot IDs for protein {}"
+CON_ERR_FUS = "Connection Error in fetch_uniport_sequences while fetching isoforms for {}\nURL: "
+CON_ERR_GENERAL = "Connection Error in {} on protein {}"
+
 
 #  AMINO ACIDS UTILS
 

@@ -7,12 +7,7 @@ from multiprocessing.pool import ThreadPool as Pool
 import tqdm
 from functools import partial
 from utils import print_if, warn_if
-
-CONTACT = "gal.passi@mail.huji.ac.il"
-HEADERS = {'User-Agent': 'Python {}'.format(CONTACT)}
-UNIPORT_URL = "http://www.uniprot.org/uniprot/"
-PROTEIN_DB = 'DB/proteins'
-MUTATION_DB = 'DB/Mutations'
+from definitions import *
 
 
 def create_parser():
@@ -146,7 +141,7 @@ def create_new_records(args, *rowiters):
             created_protein = protein
             protein.add_mut(mut_desc, dna)
         except TimeoutError:
-            print_if(args.verbose, 2, f"skipped {gene} due to timeout")
+            print_if(args.verbose, VERBOSE['thread_warnings'], f"skipped {gene} due to timeout")
             os.remove(rf'DB\test_p\{gene}')
             os.remove(rf'DB\test_m\{gene}_{mut_desc}.txt')
             skipped.append(idx)
@@ -171,13 +166,13 @@ def build_db(args, target):
     tasks_repeating = [values_iter(value, repeating_rows) for value in repeating_proteins]
 
     tasks = tasks_repeating + tasks_unique
-    print_if(args.verbose, 1,  f"running on {workers} Cpus")
+    print_if(args.verbose, VERBOSE['program_progress'],  f"running on {workers} Cpus")
     with Pool(workers) as p:
         for status in p.starmap(target, tasks):
             if status:  # if failed will return row index
                 skipped += status
 
-    if args.verbose:
+    if args.verbose >= VERBOSE['program_progress']:
         if not skipped:
             print(f"done, successfully created all records")
         else:

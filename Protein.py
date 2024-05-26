@@ -59,7 +59,7 @@ class Protein:
         self._name, self.directory = ref_name, os.path.join(PROTEIN_PATH, ref_name)
         if not os.path.exists(self.directory):
             if not load_only:
-                print_if(self._v, 2, f"Creating new protein {ref_name}:")
+                print_if(self._v, VERBOSE['thread_progress'], f"Creating new protein {ref_name}:")
                 self.create_new_entity(uniport_id)
             else:
                 raise NameError("Couldn't find protein in load only mode")
@@ -134,7 +134,7 @@ class Protein:
         :return: {isoform: [pdb_pathes]}
         """
         if mut not in self.muts:
-            print_if(self._v, 2, f"{mut} not found make sure {mut} is added to {self.name} using self.add_mut")
+            print_if(self._v, VERBOSE['thread_warnings'], f"{mut} not found make sure {mut} is added to {self.name} using self.add_mut")
             return []
         return {iso: [os.path.join(self.directory, mut, pdb + ".ent") for pdb in self.muts[mut]["pdbs"][iso]]
                 for iso in self.muts[mut]["pdbs"]}
@@ -265,7 +265,7 @@ class Protein:
         try:
             name = Mutation.Mutation.extract_name(description)
         except ValueError:
-            warn_if(self._v, 2, f"Unable to find mutation name in reference:\n{description}")
+            warn_if(self._v, VERBOSE['thread_warnings'], f"Unable to find mutation name in reference:\n{description}")
             return
 
         if name in self.muts:
@@ -274,7 +274,7 @@ class Protein:
         try:
             Mutation.Mutation(description, self, dna_data, verbose_level=self._v)  # check if given mutation is valid
         except ValueError:
-            warn_if(self._v, 2, f"Unable to find mutation in reference:\n{description}")
+            warn_if(self._v, VERBOSE['thread_warnings'], f"Unable to find mutation in reference:\n{description}")
             return
 
         data = {'chr': None, 'ref_na': None, 'alt_na': None, 'start': None, 'end': None, 'firmScore': -1.0,
@@ -287,13 +287,13 @@ class Protein:
                 data['start'] = dna_data['start']
                 data['end'] = dna_data['end']
             except KeyError:
-                warn_if(self._v, 2, f"DNA data supplied for {description} in wrong format skipping:\n{dna_data}")
+                warn_if(self._v, VERBOSE['thread_warnings'], f"DNA data supplied for {description} in wrong format skipping:\n{dna_data}")
                 data = {'chr': None, 'ref_na': None, 'alt_na': None, 'start': None, 'end': None, 'firmScore': -1.0,
                         'eveScore': -1.0, 'bertScore': tuple(), 'evePrediction': -1.0}
 
         self.muts[name] = data
         self._update_DB(os.path.join(self.directory, self.MUTS), self.muts, mode='pickle')
-        print_if(self._v, 3, f"added {description} to {self._name}")
+        print_if(self._v, VERBOSE['thread_progress'], f"added {description} to {self._name}")
 
     def find_relevent_pdbs(self, reference_sequence):
         """

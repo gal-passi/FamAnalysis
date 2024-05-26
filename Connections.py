@@ -11,8 +11,6 @@ class Uniport:
     """
     This class is responsible to connect to online DBs and retrieve information
     """
-    HEADERS = {'User-Agent': 'Python {}'.format(CONTACT)}
-
 
     def __init__(self, verbose_level=1):
         Entrez.email = CONTACT
@@ -26,20 +24,19 @@ class Uniport:
         :param expend: bool optional whether to add uid to sequence name
         :return: {uid_iso_index: sequence}
         """
-        print_if(self._v, 3, "Retrieving isoforms from Uniprt...")
+        print_if(self._v, VERBOSE['thread_progress'], "Retrieving isoforms from Uniprt...")
         if not Uid: return ''
         sequences = {}
         index = 1
         s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
         while True:
             currentUrl = f"{UNIPORT_URL}{Uid}-{index}.fasta"
-            response = safe_post_request(s, currentUrl, TIMEOUT, self._v,
-                                         f"exits early - connection error on {currentUrl}")
+            response = safe_post_request(s, currentUrl, TIMEOUT, self._v, CON_ERR_FUS.format(Uid, currentUrl))
             if not response:
                 return sequences
             seq = response.text
             if not response.ok:
-                print_if(self._v, 3, "done")
+                print_if(self._v, VERBOSE['thread_progress'], "done")
                 return sequences
             if not expend:
                 sequences[f"iso_{index}"] = self.remove_whitespaces(seq[seq.find("\n")+1:])  # remove header
@@ -59,20 +56,18 @@ class Uniport:
         """
         isoforms = {}
         if not unique_key:
-            query = UNIPORT_QUERY_URL + \
-                    f"fields=id&format=tsv&query=gene_exact:{prot.name}+AND+organism_id:9606"
+            query = UNIPORT_QUERY_URL + Q_ISOFORMS_PROT.format(prot.name)
         else:
-            query = UNIPORT_QUERY_URL + \
-                    f"fields=id&format=tsv&query={unique_key}+AND+organism_id:9606"
+            query = UNIPORT_QUERY_URL + Q_ISOFORMS_KEY.format(unique_key)
 
         s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
-        r = safe_get_request(s, query, TIMEOUT, self._v, f"expand_isoforms failed on {prot.name} - couldn't fetch Uids")
+        r = safe_get_request(s, query, TIMEOUT, self._v, CON_ERR_EI.format(prot.name))
         if not r:
             return {}
         if r.text == '':
             return {}
         uids = r.text.split("\n")
-        print_if(self._v, 3, f"found {len(uids) - 2} uids")
+        print_if(self._v, VERBOSE['thread_progress'], f"found {len(uids) - 2} uids")
         for uid in r.text.split("\n")[1:limit+1]:
             if uid == '':
                 return isoforms
@@ -105,27 +100,25 @@ class Uniport:
 
         #params = {'format': 'tab', 'query': 'ID:{}'.format(Uid), 'columns': 'id,database(PDB)'}
         s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
-        query = UNIPORT_QUERY_URL + \
-                f"fields=id,xref_pdb&format=tsv&query={Uid}"
-        print_if(self._v, 3, f"Fetching Pdb ids for {Uid}...")
-        r = safe_get_request(s, query, TIMEOUT, self._v,
-                             f"exception fetching pdb ids for {Uid}\nreturning empty...")
+        query = UNIPORT_QUERY_URL + Q_PDBS_UID.format(Uid)
+        print_if(self._v, VERBOSE['thread_progress'], f"Fetching Pdb ids for {Uid}...")
+        r = safe_get_request(s, query, TIMEOUT, self._v, CON_ERR_FP_1.format(Uid))
         if not r:
             return {}
-        print_if(self._v, 3, f"done")
+        print_if(self._v, VERBOSE['thread_progress'], f"done")
         pdbs = str(r.text).splitlines()[-1].split('\t')[-1].split(';')[:-1]
-        print_if(self._v, 3, f"Fetching pdbs sequences...")
+        print_if(self._v, VERBOSE['thread_progress'], f"Fetching pdbs sequences...")
         delta = len(pdbs) / 2  # for proteins with many pdbs default timeout might not be enough
         ret = {}
         # ret = {id: s.get(EBI_PDB_URL + f'{id}', timeout=TIMEOUT + delta).json()[id.lower()][0]['sequence']
         #      for id in pdbs}
         for id in pdbs:
             url = EBI_PDB_URL + f'{id}'
-            value = safe_get_request(s, url, TIMEOUT + delta, f"skipping pdb-{id} for {Uid} - Connection Failure")
+            value = safe_get_request(s, url, TIMEOUT + delta, CON_ERR_FP_2.format(id, Uid))
             if not value:
                 continue
             ret[id] = value.json()[id.lower()][0]['sequence']
-            print_if(self._v, 3, f"done")
+            print_if(self._v, VERBOSE['thread_progress'], f"done")
         return ret
 
     def uid_from_name(self, name, all=False, reviewed=True):
@@ -138,17 +131,14 @@ class Uniport:
         """
         UIDS = 0
         if reviewed:
-            query = UNIPORT_QUERY_URL + \
-                    f"fields=&id&format=tsv&query={name}+AND+organism_id:9606+AND+reviewed:true"
+            query = UNIPORT_QUERY_URL + Q_UID_PROT.format(name, 'true')
             #params = {'format': 'tab', 'query': f"gene_exact:{name} AND organism:homo_sapiens AND reviewed:yes", 'columns': 'id'}
         else:
-            query = UNIPORT_QUERY_URL + \
-                    f"fields=&id&format=tsv&query={name}+AND+organism_id:9606+AND+reviewed:false"
+            query = UNIPORT_QUERY_URL + Q_UID_PROT.format(name, 'false')
             #params = {'format': 'tab', 'query': f"gene_exact:{name} AND organism:homo_sapiens", 'columns': 'id'}
         s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
         #r = req.get(query, timeout=TIMEOUT)
-        r = safe_get_request(s, query, TIMEOUT, self._v,
-                             f"uid_from_name failed connection on {name}...returning empty")
+        r = safe_get_request(s, query, TIMEOUT, self._v, CON_ERR_UFN.format(name))
         if not r:
             return []
         if r.text == '':
@@ -161,7 +151,6 @@ class Uniport:
 
     def entery_name(self, protein=None, ref_name='', all_results=False):
         """
-
         :param protein: Protein obj
         :param all_results: returns list of all entery name found if False returns the first
         :return:
@@ -171,11 +160,10 @@ class Uniport:
             raise ValueError("Must include eithe protein object or protein ref_name")
 
         name = ref_name if ref_name else protein.name
-        url = f"https://rest.uniprot.org/uniprotkb/search?fields=&gene&format=tsv&query={name}+AND+organism_id:9606"
+        url = Q_UNIP_ENTERY.format(name)
         s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
         #r = req.get(url, timeout=TIMEOUT)
-        r = safe_get_request(s, url, TIMEOUT, self._v,
-                             f"Connection failure on entery_name on {name}")
+        r = safe_get_request(s, url, TIMEOUT, self._v, CON_ERR_GENERAL.format('entery_name', name))
         if not r:
             return ''
         if r.text == '':
@@ -194,11 +182,10 @@ class Uniport:
         if not protein and not by_name:
             return []
         search_term = protein.Uid if protein else by_name
-        url = f"https://rest.uniprot.org/uniprotkb/search?fields=&gene&format=tsv&query={search_term}"
+        url = Q_UNIP_ENTERY_ALIAS.format(search_term)
         s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
         #r = req.get(url, timeout=TIMEOUT)
-        r = safe_get_request(s, url, TIMEOUT, self._v,
-                             f"Connection failure on synonms on {search_term}")
+        r = safe_get_request(s, url, TIMEOUT, self._v, CON_ERR_GENERAL.format('synonms', search_term))
         if not r:
             return ''
         if r.text == '':
@@ -225,12 +212,12 @@ class Uniport:
         :param ncbi_id: str (format NM_001282166.1)
         :return: {ncbi_id : sequence}
         """
-        print_if(self._v, 3, f"Retrieving isoform {ncbi_id} from NCBI...")
+        print_if(self._v, VERBOSE['thread_progress'], f"Retrieving isoform {ncbi_id} from NCBI...")
         try:
             handle = Entrez.efetch(db="nucleotide", id=ncbi_id, retmode="xml")
         except HTTPError as e:
-            warn_if(self._v, 2, f'Unable to fetch NCBI record with id {ncbi_id} HTTPError...skipping')
-            warn_if(self._v, 3, f'Unable to fetch NCBI record with id {ncbi_id} HTTPError...skipping\n{e}')
+            warn_if(self._v, VERBOSE['thread_warnings'],  f'Unable to fetch NCBI record with id {ncbi_id} HTTPError...skipping')
+            warn_if(self._v, VERBOSE['raw_warnings'], f'\n{e}')
             return {}
         records = Entrez.read(handle)
         try:
@@ -238,11 +225,11 @@ class Uniport:
                 if dict_entry['GBFeature_key'] == 'CDS':
                     for sub_dict in dict_entry["GBFeature_quals"]:
                         if sub_dict['GBQualifier_name'] == 'translation':
-                            print_if(self._v, 3, f"done")
+                            print_if(self._v, VERBOSE['thread_progress'], f"done")
                             return{ncbi_id: sub_dict["GBQualifier_value"]}
         except Exception as e:
-            warn_if(self._v, 2, f'Unable to fetch NCBI record with id {ncbi_id}...skipping')
-            warn_if(self._v, 3, f'Unable to fetch NCBI record with id {ncbi_id}...skipping\n{e}')
+            warn_if(self._v, VERBOSE['thread_warnings'], f'Unable to fetch NCBI record with id {ncbi_id}...skipping')
+            warn_if(self._v, VERBOSE['raw_warnings'], f'\n{e}')
             return {}
 
     def alphafold_confidence(self, prot, mut):
@@ -252,11 +239,11 @@ class Uniport:
         s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
         #resp = req.get(ALPHAFOLD_PDB_URL.format(prot.Uid), timeout=TIMEOUT)
         resp = safe_get_request(s, ALPHAFOLD_PDB_URL.format(prot.Uid), TIMEOUT, self._v,
-                             f"Failed to find alphafold model for {prot.Uid} - Connection Failure")
+                             CON_ERR_GENERAL.format('alphafold_confidence', prot.Uid))
         if not resp:
             return -1
         if not resp.ok:
-            warn_if(self._v, 2, f"Failed to find alphafold model for {prot.Uid}")
+            warn_if(self._v, VERBOSE['thread_warnings'], f"Failed to find alphafold model for {prot.Uid}")
             return -1
         relavent_confidence = [float(i[61:66]) for i in resp.content.split(b"\n") if
                                i.startswith(b"ATOM  ") and int(i[22:26]) == mut.loc and
@@ -265,13 +252,13 @@ class Uniport:
         if len(relavent_confidence) < 1:
             # try to find in sequence assumes reference length of 10
             if not mut.ref_seqs:
-                warn_if(self._v, 2, f"Failed to find residue {mut.origAA} in {mut.loc} -- no ref seqs")
+                warn_if(self._v, VERBOSE['thread_warnings'], f"Failed to find residue {mut.origAA} in {mut.loc} -- no ref seqs")
                 return -1
             sequence = self._obtain_seq(resp)
             ref = next(iter(mut.ref_seqs.values()))
             index = sequence.find(ref)
             if index == -1:
-                warn_if(self._v, 2, f"Faild to find residue {mut.origAA} in {mut.loc} -- can't find reference in sequence")
+                warn_if(self._v, VERBOSE['thread_warnings'], f"Faild to find residue {mut.origAA} in {mut.loc} -- can't find reference in sequence")
                 return -1
             # if reference sequence is not 10 need to change "5"
             relavent_confidence = [float(i[61:66]) for i in resp.content.split(b"\n") if
@@ -283,7 +270,7 @@ class Uniport:
         s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
         #resp = req.get(ALPHAFOLD_PDB_URL.format(prot.Uid), timeout=TIMEOUT)
         resp = safe_get_request(s, ALPHAFOLD_PDB_URL.format(prot.Uid), TIMEOUT, self._v,
-                                f"Failed to find alphafold sequence for {prot.Uid} - Connection Failure")
+                                 CON_ERR_GENERAL.format('alpha_seq', prot.Uid))
         if not resp:
             return ''
         if not resp.ok:
