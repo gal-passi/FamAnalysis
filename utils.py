@@ -140,6 +140,13 @@ def afm_iterator(chunksize, usecols=None):
                              header=AFM_HEADER, usecols=usecols):
         yield chunk
 
+def afm_range_read(idx_from, idx_to, usecols=None):
+    nrows = idx_to - idx_from
+    return pd.read_csv(AFM_DATA_PATH, sep='\t', names=AFM_COL_NAMES, header=AFM_HEADER, skiprows=idx_from,
+                       nrows=nrows, usecols=usecols)
+
+
+
 def ugzip(path, outfile, chunksize):
     """
     unzips .gz file in chunks
@@ -291,22 +298,6 @@ def find_mutations_with_pdbs(protein, log="log.txt", found='found.txt'):
             with open(log, 'a') as file:
                 file.write(f"{protein.name} - {mut_obj} - {mut_obj.pdbs}\n")
 
-
-def all_proteins():
-    """
-    :return: iterable of all Protein objects in DB
-    """
-    for path in glob.glob(os.path.join(PROTEIN_DB, '*')):
-        prot_name = os.path.basename(path)
-        yield Protein(ref_name=prot_name)
-
-
-def all_mutations():
-    for path in glob.glob(os.path.join(MUTATION_DB, '*')):
-        mut_name = os.path.basename(path)
-        if mut_name == 'desktop.ini':
-            continue
-        yield utils.create_mutation(mut_name)
 
 
 '''

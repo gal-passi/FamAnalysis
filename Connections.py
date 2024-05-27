@@ -268,14 +268,13 @@ class Uniport:
 
     def alpha_seq(self, prot):
         s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
-        #resp = req.get(ALPHAFOLD_PDB_URL.format(prot.Uid), timeout=TIMEOUT)
         resp = safe_get_request(s, ALPHAFOLD_PDB_URL.format(prot.Uid), TIMEOUT, self._v,
                                  CON_ERR_GENERAL.format('alpha_seq', prot.Uid))
         if not resp:
-            return ''
+            return {}
         if not resp.ok:
-            return ''
-        return self._obtain_seq(resp)
+            return {}
+        return {'alpha': self._obtain_seq(resp)}
 
     def _obtain_seq(self, bytefile):
         """

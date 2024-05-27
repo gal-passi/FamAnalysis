@@ -165,10 +165,6 @@ class Mutation:
         return self._change
 
     @property
-    def location(self):
-        return self._loc_
-
-    @property
     def loc(self):
         return self._loc
 
@@ -462,6 +458,20 @@ class Mutation:
         for pdbs in self.pdbs.values():
             for pdb, _ in pdbs:
                 self._unip.download_pdb(pdb, path)
+
+    def update_score(self, model, score):
+        """
+        updates mutation model scores
+        :param model: str one of: EVE | ESM | AFM
+        :param score:
+        :return:
+        """
+        assert model in AVAILABLE_MODELS, f"model must be one of {' '.join(AVAILABLE_MODELS)}"
+        assert isinstance(score, (float, type(None))), 'score must be either float or None'
+        prot = self.prot
+        prot.mutations[self.extended_description][MODELS_SCORES[model]] = score
+        prot._update_DB(os.path.join(prot.directory, prot.MUTS), prot.mutations, mode='pickle')
+
 
     def print_status(self):
         print(f"protein name:           {self.protein_name}")

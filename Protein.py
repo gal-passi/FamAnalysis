@@ -65,7 +65,7 @@ class Protein:
                 raise NameError("Couldn't find protein in load only mode")
 
         else:
-            print(f"Protein {ref_name} was loaded")
+            print_if(self._v, VERBOSE['thread_progress'], f"Protein {ref_name} was loaded")
             self._Uids, self.isoforms, self.pdbs, self.muts = self.load_protein()
 
 
@@ -88,7 +88,15 @@ class Protein:
 
     @property
     def mutations(self):
-        return self.muts
+        return list(self.muts.keys())
+
+    def generate_mutations(self):
+        """
+        generator of all self Mutation objects
+        :return:
+        """
+        for mut_desc in self.mutations:
+            yield Mutation.Mutation(mut_desc, self)
 
     @property
     def Uid(self):
@@ -212,8 +220,9 @@ class Protein:
             file.write(json.dumps(uids))
 
         isoforms = self._unip.fetch_uniport_sequences(self.Uid)
+        alphafold_seq = self._unip.alpha_seq(self)
         ncbi = {} if not self.ncbi_id else self._unip.fatch_all_NCBIs(self.ncbi_id)
-        isoforms = {**isoforms, **ncbi}
+        isoforms = {**isoforms, **ncbi, **alphafold_seq}
         self.isoforms = isoforms
         with open(os.path.join(self.directory, self.ISOFORMS), "w") as file:
             file.write(json.dumps(isoforms))
@@ -277,8 +286,7 @@ class Protein:
             warn_if(self._v, VERBOSE['thread_warnings'], f"Unable to find mutation in reference:\n{description}")
             return
 
-        data = {'chr': None, 'ref_na': None, 'alt_na': None, 'start': None, 'end': None, 'firmScore': -1.0,
-                'eveScore': -1.0, 'bertScore': tuple(), 'evePrediction': -1.0}
+        data = NEW_MUTATION_DATA
         if dna_data:
             try:
                 data['chr'] = dna_data['chr']
@@ -288,8 +296,7 @@ class Protein:
                 data['end'] = dna_data['end']
             except KeyError:
                 warn_if(self._v, VERBOSE['thread_warnings'], f"DNA data supplied for {description} in wrong format skipping:\n{dna_data}")
-                data = {'chr': None, 'ref_na': None, 'alt_na': None, 'start': None, 'end': None, 'firmScore': -1.0,
-                        'eveScore': -1.0, 'bertScore': tuple(), 'evePrediction': -1.0}
+                data = NEW_MUTATION_DATA
 
         self.muts[name] = data
         self._update_DB(os.path.join(self.directory, self.MUTS), self.muts, mode='pickle')

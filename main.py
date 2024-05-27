@@ -1,3 +1,5 @@
+import Analyze
+import Mutation
 from Protein import Protein
 import pandas as pd
 import os
@@ -6,8 +8,26 @@ from multiprocessing import cpu_count
 from multiprocessing.pool import ThreadPool as Pool
 import tqdm
 from functools import partial
-from utils import print_if, warn_if
+from utils import print_if
 from definitions import *
+import glob
+import time
+
+
+
+def all_proteins():
+    """
+    :return: iterable of all Protein objects in DB
+    """
+    for path in glob.glob(os.path.join(PROTEIN_PATH, '*')):
+        prot_name = os.path.basename(path)
+        yield Protein(ref_name=prot_name)
+
+
+def all_mutations():
+    for prot in all_proteins():
+        for mut_desc in prot.mutations:
+            yield Mutation.Mutation(mut_desc, prot)
 
 
 def create_parser():
@@ -148,7 +168,6 @@ def create_new_records(args, *rowiters):
     return skipped
 
 
-
 def build_db(args, target):
     skipped = []
     df = pd.read_csv(args.data_path)
@@ -166,7 +185,8 @@ def build_db(args, target):
     tasks_repeating = [values_iter(value, repeating_rows) for value in repeating_proteins]
 
     tasks = tasks_repeating + tasks_unique
-    print_if(args.verbose, VERBOSE['program_progress'],  f"running on {workers} Cpus")
+    print_if(args.verbose, VERBOSE['program_progress'], f"Building protein database...")
+    print_if(args.verbose, VERBOSE['program_progress'],  f"running on {workers} CPUs")
     with Pool(workers) as p:
         for status in p.starmap(target, tasks):
             if status:  # if failed will return row index
@@ -174,12 +194,30 @@ def build_db(args, target):
 
     if args.verbose >= VERBOSE['program_progress']:
         if not skipped:
-            print(f"done, successfully created all records")
+            print_if(args.verbose, VERBOSE['program_progress'], f"done, successfully created all records")
         else:
-            print(f"done, skipped records in indexes:\n{', '.join(str(x) for x in skipped)}")
+            print_if(args.verbose, VERBOSE['program_progress'], f"done, skipped records in indexes:\n"
+                                                                f"{', '.join(str(x) for x in skipped)}")
 
     return skipped
 
+
+def calc_afm_scores(args, target):
+    """
+    calculates AlfaMissense scores to all Mutations using multiprocessing
+    :param args:
+    :param target: Callable
+    :return:
+    """
+    workers = args.workers if args.workers else cpu_count()
+    tasks = [iter(protein.generate_mutations()) for protein in all_proteins()]
+    n_muts, n_scores = len(glob.glob(pjoin(MUTATION_PATH, '*.txt'))), 0
+    print_if(args.verbose, VERBOSE['program_progress'], f"Calculating AlphaMissense scores...")
+    print_if(args.verbose, VERBOSE['program_progress'], f"running on {workers} CPUs")
+    with Pool(workers) as p:
+        for status in p.starmap(target, tasks):
+            n_scores += status
+    print_if(args.verbose, VERBOSE['program_progress'], f"done, scored {n_scores} of {n_muts} mutations")
 
 def main(args):
     for action in args.action:
@@ -188,9 +226,17 @@ def main(args):
             target = partial(create_new_records, args)
             skipped = build_db(args, target=target)
             return skipped
+        if action == 'score-AFM':
+            analyzer = Analyze.ProteinAnalyzer()
+            target = partial(calc_mutations_afm_scores, args, analyzer)
+            calc_afm_scores(args, target)
+
 
 
 if __name__ == "__main__":
     parser = create_parser()
     args = parser.parse_args()
+    start_time = time.time()
     main(args)
+    print("--- %s seconds ---" % (time.time() - start_time))
+

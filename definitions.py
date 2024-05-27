@@ -1,11 +1,11 @@
 from os.path import dirname, abspath
 from os.path import join as pjoin
+import json
 
 #  CONTACT INFO CHANGE TO YOUR EMAIL
 
 CONTACT = "gal.passi@mail.huji.ac.il"
 HEADERS = {'User-Agent': 'Python {}'.format(CONTACT)}
-
 
 #  VERBOSE THRESHOLDS
 
@@ -64,7 +64,6 @@ CON_ERR_UFN = "Connection Error in uid_from_name failed to fetch Uniprot IDs for
 CON_ERR_FUS = "Connection Error in fetch_uniport_sequences while fetching isoforms for {}\nURL: "
 CON_ERR_GENERAL = "Connection Error in {} on protein {}"
 
-
 #  AMINO ACIDS UTILS
 
 AA_SYN = {"A": "ALA", "C": "CYS", "D": "ASP", "E": "GLU", "F": "PHE", "G": "GLY", "H": "HIS", "I": "ILE",
@@ -72,10 +71,24 @@ AA_SYN = {"A": "ALA", "C": "CYS", "D": "ASP", "E": "GLU", "F": "PHE", "G": "GLY"
               "T": "THR", "V": "VAL", "W": "TRP", "Y": "TYR"}
 AA_SYN_REV = dict((v, k) for k, v in AA_SYN.items())
 
-#  PROTEINS CHANGE OF NAMES
+#  SCORING MODELS
+
+FIRM_SCORE = 'firmScore'  # deprecated
+EVE_SCORE = 'eveScore'
+EVE_PREDICTION = 'evePrediction'
+ESM_SCORE = 'bertScore'
+AFM_SCORE = 'afmScore'
+AVAILABLE_MODELS = {'EVE',  'ESM', 'AFM'}
+MODELS_SCORES = {'EVE': 'eveScore', 'ESM': 'bertScore', 'AFM': 'afmScore', 'FIRM': 'firmScore'}
+
+
+#  PROTEINS CONSTANTS
 
 PROTEIN_ALIASES = {'LOC100287896': 'LIPT2', 'FPGT-TNNI3K': 'TNNI3K', 'ATPSJ2-PTCD1': 'PTCD1', 'CCL4L1': 'CCL4L2',
                 'PTGDR2': 'CCDC86', '4-SEPT': 'SEPT4'}
+NEW_MUTATION_DATA = {'chr': None, 'ref_na': None, 'alt_na': None, 'start': None, 'end': None, AFM_SCORE: -1.0,
+                        EVE_SCORE: -1.0, ESM_SCORE: tuple(), EVE_PREDICTION: -1.0}
+
 
 #  ALPHA MISSENSE DATA
 
@@ -83,10 +96,15 @@ AFM_PUBLIC_DATA = 'https://storage.googleapis.com/dm_alphamissense/AlphaMissense
 AFM_DATA = 'AlphaMissense_aa_substitutions.tsv'
 AFM_DATA_PATH = pjoin(AFM_PATH, AFM_DATA)
 AFM_DIRECTORY = 'index.json'
+AFM_RANGES = 'ranges.json'
 AFM_DIRECTORY_PATH = pjoin(AFM_PATH, AFM_DIRECTORY)
+AFM_RANGES_PATH = pjoin(AFM_PATH, AFM_RANGES)
 AFM_HEADER = 3
+AFM_COL_NAMES = ['uniprot_id', 'protein_variant', 'am_pathogenicity', 'am_class']
 AFM_ROWSIZE = 32.0
 AFM_UID_ROWSIZE = 8.0
+AF_ISO_NAME = 'alpha'
+
 
 
 

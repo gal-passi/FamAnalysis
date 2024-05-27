@@ -4,6 +4,7 @@ import os
 from os.path import join as pjoin
 import wget
 import json
+import pandas as pd
 
 
 def create_directories():
@@ -25,6 +26,12 @@ def create_afm_index():
     inverse_index = {v: k for k, v in index.items()}
     with open(AFM_DIRECTORY_PATH, "w") as file:
         file.write(json.dumps(inverse_index))
+    idxs = list(inverse_index.values())
+    idxs.sort()
+    ranges = {int(idxs[i]): int(idxs[i + 1]) for i in range(len(idxs) - 1)}
+    ranges[int(idxs[-1])] = None
+    with open(AFM_RANGES_PATH, "w") as file:
+        file.write(json.dumps(ranges))
     print('done')
 
 def download_data():
@@ -38,8 +45,7 @@ def download_data():
     print('done')
 
 if __name__ == '__main__':
-    create_directories()
-    download_data()
+    #create_directories()
+    #download_data()
     create_afm_index()
-
 

@@ -9,7 +9,7 @@ import glob
 import pandas as pd
 import Mutation
 import pickle
-from utils import adaptive_chunksize, make_fasta, afm_iterator
+from utils import adaptive_chunksize, make_fasta, afm_range_read
 import Connections
 from pathlib import Path
 import Patient
@@ -71,6 +71,10 @@ class ProteinAnalyzer:
         with open(self.EVE_REVERSE_INDEX, "rb") as fp:
             self.eve_reverse_index = pickle.load(fp)
         self._unip = Connections.Uniport(verbose_level= verbose_level)
+        with open(AFM_DIRECTORY_PATH, 'r') as file:
+            self.af_index = json.load(file)
+        with open(AFM_RANGES_PATH, 'r') as file:
+            self.af_ranges = json.load(file)
 
 
     def analyze_all_proteins(self):
@@ -390,19 +394,42 @@ class ProteinAnalyzer:
         df = df[df['mutant'] == desc][f'{"Transfer_EVE" if ingene else "Transfer_imputed_EVE"}']
         return -1 if len(df) == 0 else float(df)
 
-    def score_mutation_afm(self, mutation, offset, gz=False):
+    def score_mutation_afm(self, mutation, offset=0):
         """
         tries to give scores for mutation using AlphaMissense
+        will search main Uniprot entry and if not found all reviewed entries
         :param mutation: Mutation object
         :param offset: int offset for mutation index
         :param gz: bool if true will unzip the data
         :return: float AlphaMissense score if found else -1
         """
-        with open(AFM_DIRECTORY_PATH, 'r') as file:
-            index = json.load(file)
-        chunksize = adaptive_chunksize(AFM_ROWSIZE, ram_usage=DEFAULT_RAM_USAGE)
-        for chunk in afm_iterator(chunksize):
-            pass
+        main_uid = mutation.protein.Uid
+        reviewed_uids = mutation.protein.all_uids()['reviewed']
+        variant_location = mutation.loc + offset
+        variant = f"{mutation.origAA}{variant_location}{mutation.changeAA}"
+        for uid in [main_uid] + reviewed_uids:
+            if uid in self.af_index:
+                idx_from = self.af_index[main_uid]
+                idx_to = self.af_ranges[str(idx_from)]
+                score = self._afm_score_from_uid(variant, idx_from, idx_to)
+                if score is not None:
+                    return score
+        # score not found
+        return None
+
+
+    @staticmethod
+    def _afm_score_from_uid(variant, idx_from, idx_to):
+        """
+        extract alpha Missense score from raw data if not found returns -1
+        :param variant: str protein variant in formal [AA][location][AA]
+        :param idx_from: int
+        :param idx_to: int
+        :return:
+        """
+        data = afm_range_read(idx_from, idx_to)
+        score = data[data['protein_variant'] == variant]['am_pathogenicity']
+        return float(score.iloc[0]) if not score.empty else None
 
 
     @staticmethod
@@ -480,7 +507,7 @@ class ProteinAnalyzer:
         name = job_name if job_name else f"{mutation_a.long_name}_{mutation_b.long_name}_{padding}"
         fasta_content = f"{seq_1}:{seq_2}"
         assert len(fasta_content) <= (padding*4)+2, f"{len(fasta_content)} - sequence len appears to be wrong"
-        utils.make_fasta(ipath, name, f"{seq_1}:{seq_2}")
+        make_fasta(ipath, name, f"{seq_1}:{seq_2}")
         #TODO might want to add option to run the job
 
     def interactions(self, protein):
