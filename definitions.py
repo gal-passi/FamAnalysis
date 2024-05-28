@@ -24,6 +24,10 @@ PROTEIN_PATH = pjoin(DB_PATH, PROTEINS)
 MUTATIONS = 'test_m'
 MUTATION_PATH = pjoin(DB_PATH, MUTATIONS)
 AFM_PATH = pjoin(DB_PATH, 'AFM')
+EVE_PATH = pjoin(DB_PATH, 'EVE')
+CPT_PATH = pjoin(DB_PATH, 'CPT')
+CPT_INGENE_PATH = pjoin(CPT_PATH, 'transfer_proteome_eve')
+CPT_EXGENE_PATH = pjoin(CPT_PATH, 'transfer_proteome_xgimpute')
 
 #  REQUESTS CONSTANTS
 
@@ -80,14 +84,18 @@ ESM_SCORE = 'bertScore'
 AFM_SCORE = 'afmScore'
 AVAILABLE_MODELS = {'EVE',  'ESM', 'AFM'}
 MODELS_SCORES = {'EVE': 'eveScore', 'ESM': 'bertScore', 'AFM': 'afmScore', 'FIRM': 'firmScore'}
+NO_SCORE = -1.0
+
+# ANALYZER CONSTANTS
+
 
 
 #  PROTEINS CONSTANTS
 
 PROTEIN_ALIASES = {'LOC100287896': 'LIPT2', 'FPGT-TNNI3K': 'TNNI3K', 'ATPSJ2-PTCD1': 'PTCD1', 'CCL4L1': 'CCL4L2',
                 'PTGDR2': 'CCDC86', '4-SEPT': 'SEPT4'}
-NEW_MUTATION_DATA = {'chr': None, 'ref_na': None, 'alt_na': None, 'start': None, 'end': None, AFM_SCORE: -1.0,
-                        EVE_SCORE: -1.0, ESM_SCORE: tuple(), EVE_PREDICTION: -1.0}
+NEW_MUTATION_DATA = {'chr': None, 'ref_na': None, 'alt_na': None, 'start': None, 'end': None, AFM_SCORE: NO_SCORE,
+                        EVE_SCORE: NO_SCORE, ESM_SCORE: tuple(), EVE_PREDICTION: NO_SCORE}
 
 
 #  ALPHA MISSENSE DATA
@@ -104,7 +112,13 @@ AFM_COL_NAMES = ['uniprot_id', 'protein_variant', 'am_pathogenicity', 'am_class'
 AFM_ROWSIZE = 32.0
 AFM_UID_ROWSIZE = 8.0
 AF_ISO_NAME = 'alpha'
+AFM_ROWS = 216175351
 
+#  EVE AND CPT DATA
 
+EVE_INDEX_PATH = pjoin(EVE_PATH, 'index_unip')
+EVE_INDEX_PATH_2 = pjoin(EVE_PATH, 'eve_index.txt')
+EVE_EXTENDED_INDEX_PATH = pjoin(EVE_PATH, 'index_unip_full')
+EVE_INVERSE_INDEX = pjoin(EVE_PATH, 'eve_reverse_index.txt')
 
 

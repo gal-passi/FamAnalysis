@@ -16,6 +16,7 @@ import Patient
 import Family
 from copy import deepcopy
 from definitions import *
+import deprecation
 
 
 ROOT = os.path.join(os.path.dirname(__file__))
@@ -24,17 +25,6 @@ ROOT = os.path.join(os.path.dirname(__file__))
 class ProteinAnalyzer:
 
     INTERFACE = "/cs/staff/dina/utils/srcs/interface/interface"
-    KNOWN_ONCOGENES_ROOT = f"{ROOT}/DB/Known_genes/united.txt"
-    KNOWN_ONCOGENES_SOURCES = ["Nexobio_Breast.txt", "UKB_Analysis_Nadav_Dominant.txt", "UKB_Analysis_Nadav_Recesive.txt",
-                               "NCBI_Breast.txt", "Daehee_LowPenetrance_Loci.txt", "Daehee_LowPenetrance_Genes.txt",
-                               "Capture_HIC.txt"]
-    EVE_DB_ROOT = f"{ROOT}/DB/EVE/variant_files/"
-    CPT_DB_INGENE = f"{ROOT}/DB/CPT/transfer_proteome_eve/"
-    CPT_DB_EXGENE = f"{ROOT}/DB/CPT/transfer_proteome_xgimpute/"
-    EVE_INDEX_ROOT = f"{ROOT}/DB/EVE/index_unip"
-    EVE_INDEX_FULL_ROOT = f"{ROOT}/DB/EVE/index_unip_full"
-    EVE_INDEX = f"{ROOT}/DB/EVE/eve_index.txt"
-    EVE_REVERSE_INDEX = f"{ROOT}/DB/EVE/eve_reverse_index.txt"
     BERT_DB_ROOT = f"{ROOT}/DB/bert"
     STRINGS_DB_ROOT = f"{ROOT}/DB/strings"
     STRINGS_INDEX_ROOT = f"{ROOT}/DB/strings/strings_index.txt"
@@ -50,25 +40,22 @@ class ProteinAnalyzer:
 
     def __init__(self, *proteins, verbose_level=1):
         self.proteins = {protein.name: protein for protein in proteins}
-        # create a dict of known oncogenes for breast cancer. {source name:set(genes names)}
-        self._cpt_ingene = set([Path(i).with_suffix('').stem for i in glob.glob(f'{self.CPT_DB_INGENE}*.csv*')])
-        self._cpt_exgene = set([Path(i).with_suffix('').stem for i in glob.glob(f'{self.CPT_DB_EXGENE}*.csv*')])
-        with open(self.KNOWN_ONCOGENES_ROOT, "r") as file:
-            self.known_oncogenes = json.loads(file.read())
-        self.eve_records = list(map(lambda x: os.path.basename(x)[:-10], glob.glob(self.EVE_DB_ROOT + "*.csv")))
-        with open(self.EVE_INDEX_ROOT, "rb") as fp:   # Unpickling
-            self.eve_index_unip = pickle.load(fp)
-        with open(self.EVE_INDEX_FULL_ROOT, "rb") as fp:   # Unpickling
-            self.eve_index_unip_full = pickle.load(fp)
+        self._cpt_ingene = set([Path(i).with_suffix('').stem for i in glob.glob(f"{pjoin(CPT_INGENE_PATH, '*.csv*')}")])
+        self._cpt_exgene = set([Path(i).with_suffix('').stem for i in glob.glob(f"{pjoin(CPT_EXGENE_PATH, '*.csv*')}")])
+        self.eve_records = list(map(lambda x: os.path.basename(x)[:-10], glob.glob(EVE_PATH + "*.csv")))
+        #with open(EVE_INDEX_PATH, "rb") as fp:   # Unpickling
+        #    self.eve_index_unip = pickle.load(fp)
+        #with open(EVE_EXTENDED_INDEX_PATH, "rb") as fp:   # Unpickling
+        #    self.eve_index_unip_full = pickle.load(fp)
         with open(self.STRINGS_INDEX_ROOT, "rb") as fp:
             self.strings_index = pickle.load(fp)
         with open(self.STRINGS_REVERSE_INDEX_ROOT, "rb") as fp:
             self.strings_rindex = pickle.load(fp)
         with open(self.STRING_NEBS, "rb") as fp:
             self.protein_nebs = pickle.load(fp)
-        with open(self.EVE_INDEX, "rb") as fp:
+        with open(EVE_INDEX_PATH_2, "rb") as fp:
             self.eve_index = pickle.load(fp)
-        with open(self.EVE_REVERSE_INDEX, "rb") as fp:
+        with open(EVE_INVERSE_INDEX, "rb") as fp:
             self.eve_reverse_index = pickle.load(fp)
         self._unip = Connections.Uniport(verbose_level= verbose_level)
         with open(AFM_DIRECTORY_PATH, 'r') as file:
@@ -184,34 +171,6 @@ class ProteinAnalyzer:
         res = {record.id: record.seq for record in SeqIO.parse(pdb_path, 'pdb-seqres')}
         return {id.split(':')[1] if ':' in id else id : seq for id, seq in res.items()}
 
-    def _search_litriture(self, protein=None, prot_list=[], bool=False):
-        """
-        A non-static version of search_litriture
-        searches protein in records of known breast cancer oncogenes
-        :param protein: Protein obj
-        :param prot_list: optional list of protein reference names to search
-        :return: if a list is given returns a set of reference names found.
-        if a Protein object is given updates the entity
-        """
-        if prot_list:
-            return {protein for protein in prot_list if protein in self.known_oncogenes} #TODO needs to be corrected to handle objects
-        if bool:
-            return protein.name in self.known_oncogenes
-        else:
-            return self.known_oncogenes[protein.name] if  protein.name in self.known_oncogenes else []
-
-    @staticmethod
-    def search_litriture(protein, directory ="DB/Known_genes/united.txt"):
-        """
-        a static version of _search_litriture searches the given protein in known breast cancer oncogenes
-        :param protein: str protein ref name
-        :param directory: a json db of known oncogenes. default is ProteinAnalyzer.KNOWN_ONCOGENES_ROOT
-        :return: bool, list[mentioned_in]
-        """
-        with open(directory, "r") as file:
-            oncogenes = json.loads(file.read())
-            return protein in oncogenes, oncogenes.get(protein)
-
     @staticmethod
     def search_eve_record(prot_name):
         """
@@ -255,7 +214,7 @@ class ProteinAnalyzer:
         :param mutation: Mutation obj to find
         :return: tuple (eve_score, -1 if not found, Eve_class 75% ASM prediction)
         """
-        path = self.EVE_DB_ROOT + f"{prot_name}_HUMAN.csv"
+        path = EVE_PATH + f"{prot_name}_HUMAN.csv"
         if not os.path.exists(path):
             return -1, -1
         data = pd.read_csv(path).fillna(-1)
@@ -384,7 +343,11 @@ class ProteinAnalyzer:
         :return: float score -1 if not found
         """
         #print(f"called with {entery_name} and ingene={ingene}")
-        path = fr"{self.CPT_DB_INGENE if ingene else self.CPT_DB_EXGENE}{entery_name}.csv"
+        file = f"{entery_name}.csv"
+        if ingene:
+            path = pjoin(CPT_INGENE_PATH, file)
+        else:
+            path = pjoin(CPT_INGENE_PATH, file)
         if gz:
             path += ".gz"
             df = pd.read_csv(path, compression='gzip', header=0, sep=',', quotechar='"', on_bad_lines='skip')
@@ -394,24 +357,31 @@ class ProteinAnalyzer:
         df = df[df['mutant'] == desc][f'{"Transfer_EVE" if ingene else "Transfer_imputed_EVE"}']
         return -1 if len(df) == 0 else float(df)
 
-    def score_mutation_afm(self, mutation, offset=0):
+    def score_mutation_afm(self, mutation, chunk=None, uid_index=None, offset=0, use_alias=False):
         """
         tries to give scores for mutation using AlphaMissense
         will search main Uniprot entry and if not found all reviewed entries
+
         :param mutation: Mutation object
         :param offset: int offset for mutation index
-        :param gz: bool if true will unzip the data
+        :param chunk: DataFrame - optional if given will search for the mutation in batch
+                    instead of importing data from disk. Recommended when scoring multiple mutations.
+        :param uid_index: optional set of uids in chunk, can reduce running time
         :return: float AlphaMissense score if found else -1
         """
         main_uid = mutation.protein.Uid
         reviewed_uids = mutation.protein.all_uids()['reviewed']
+        if isinstance(reviewed_uids, str):
+            reviewed_uids = [reviewed_uids]
         variant_location = mutation.loc + offset
         variant = f"{mutation.origAA}{variant_location}{mutation.changeAA}"
-        for uid in [main_uid] + reviewed_uids:
-            if uid in self.af_index:
-                idx_from = self.af_index[main_uid]
+        index = uid_index if uid_index is not None else self.af_index
+        uids = [main_uid] + reviewed_uids if use_alias else [main_uid]
+        for uid in uids:
+            if uid in index:
+                idx_from = self.af_index[uid]
                 idx_to = self.af_ranges[str(idx_from)]
-                score = self._afm_score_from_uid(variant, idx_from, idx_to)
+                score = self._afm_score_from_uid(variant, idx_from, idx_to, chunk)
                 if score is not None:
                     return score
         # score not found
@@ -419,15 +389,17 @@ class ProteinAnalyzer:
 
 
     @staticmethod
-    def _afm_score_from_uid(variant, idx_from, idx_to):
+    def _afm_score_from_uid(variant, idx_from, idx_to, chunk=None):
         """
         extract alpha Missense score from raw data if not found returns -1
         :param variant: str protein variant in formal [AA][location][AA]
         :param idx_from: int
         :param idx_to: int
+        :param v: DataFrame - optional if given will search for the mutation in batch
+                    instead of importing data from disk. Recommended when scoring multiple mutations.
         :return:
         """
-        data = afm_range_read(idx_from, idx_to)
+        data = afm_range_read(idx_from, idx_to) if chunk is None else chunk
         score = data[data['protein_variant'] == variant]['am_pathogenicity']
         return float(score.iloc[0]) if not score.empty else None
 

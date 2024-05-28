@@ -309,6 +309,14 @@ class Mutation:
         return self.eve_score != -1
 
     @property
+    def afm_score(self):
+        return self._protein.muts[self.extended_description][AFM_SCORE]
+
+    @property
+    def has_afm(self):
+        return (self.afm_score is not None) and (self.afm_score != NO_SCORE)
+
+    @property
     def eve_prediction(self):
         return self._protein.muts[self.extended_description]['evePrediction']
 
@@ -468,9 +476,9 @@ class Mutation:
         """
         assert model in AVAILABLE_MODELS, f"model must be one of {' '.join(AVAILABLE_MODELS)}"
         assert isinstance(score, (float, type(None))), 'score must be either float or None'
-        prot = self.prot
-        prot.mutations[self.extended_description][MODELS_SCORES[model]] = score
-        prot._update_DB(os.path.join(prot.directory, prot.MUTS), prot.mutations, mode='pickle')
+        prot = self.protein
+        prot.muts[self.extended_description][MODELS_SCORES[model]] = score
+        prot._update_DB(os.path.join(prot.directory, prot.MUTS), prot.muts, mode='pickle')
 
 
     def print_status(self):

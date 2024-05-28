@@ -8,10 +8,11 @@ from multiprocessing import cpu_count
 from multiprocessing.pool import ThreadPool as Pool
 import tqdm
 from functools import partial
-from utils import print_if
+from utils import print_if, adaptive_chunksize, afm_iterator
 from definitions import *
 import glob
 import time
+from math import ceil
 
 
 
@@ -26,8 +27,8 @@ def all_proteins():
 
 def all_mutations():
     for prot in all_proteins():
-        for mut_desc in prot.mutations:
-            yield Mutation.Mutation(mut_desc, prot)
+        for mutation in prot.generate_mutations():
+            yield mutation
 
 
 def create_parser():
@@ -168,10 +169,9 @@ def create_new_records(args, *rowiters):
     return skipped
 
 
-def build_db(args, target):
+def build_db(args, target, workers):
     skipped = []
     df = pd.read_csv(args.data_path)
-    workers = args.workers if args.workers else cpu_count()
     values_iter = lambda value, data: data[data[args.protein_col] == value].iterrows()
 
     # tasks are per-protein iterators to prevent race conditions
@@ -186,7 +186,6 @@ def build_db(args, target):
 
     tasks = tasks_repeating + tasks_unique
     print_if(args.verbose, VERBOSE['program_progress'], f"Building protein database...")
-    print_if(args.verbose, VERBOSE['program_progress'],  f"running on {workers} CPUs")
     with Pool(workers) as p:
         for status in p.starmap(target, tasks):
             if status:  # if failed will return row index
@@ -202,35 +201,62 @@ def build_db(args, target):
     return skipped
 
 
-def calc_afm_scores(args, target):
+#def calc_mutations_afm_scores(args, analyzer, chunk=None, *mutations):
+def calc_mutations_afm_scores(args, analyzer, chunk=None, iter_desc='', use_alias=False, recalc=False):
     """
-    calculates AlfaMissense scores to all Mutations using multiprocessing
+    calculates Alpha Missense scores for all the mutations of a specific protein
+    :param recalc: bool re-calculate scored to mutations with scores
+    :param use_alias: bool should reviewed uid aliases be searched
     :param args:
-    :param target: Callable
+    :param analyzer: ProteinAnalyzer object
+    :param chunk: optional df chunk to search mutation in
+    :param mutations: Iterator of Mutations
     :return:
     """
-    workers = args.workers if args.workers else cpu_count()
-    tasks = [iter(protein.generate_mutations()) for protein in all_proteins()]
-    n_muts, n_scores = len(glob.glob(pjoin(MUTATION_PATH, '*.txt'))), 0
-    print_if(args.verbose, VERBOSE['program_progress'], f"Calculating AlphaMissense scores...")
-    print_if(args.verbose, VERBOSE['program_progress'], f"running on {workers} CPUs")
-    with Pool(workers) as p:
-        for status in p.starmap(target, tasks):
-            n_scores += status
-    print_if(args.verbose, VERBOSE['program_progress'], f"done, scored {n_scores} of {n_muts} mutations")
+    successful = 0
+    if recalc:
+        tasks = list(all_mutations())
+    else:
+        tasks = [mut for mut in all_mutations() if not mut.has_afm]
+    n_muts = len(tasks)
+    if chunk is not None:
+        uid_index = set(chunk['uniprot_id'].unique())
+    for mutation in tqdm.tqdm(tasks, desc=iter_desc, total=n_muts):
+        print_if(args.verbose, VERBOSE['thread_progress'], f"Calculating AlphaMissense scores for {mutation.long_name}")
+        score = analyzer.score_mutation_afm(mutation, chunk=chunk, uid_index=uid_index, use_alias=use_alias)
+        successful += score is not None
+        mutation.update_score('AFM', score)
+    return successful
+
 
 def main(args):
+    workers = args.workers if args.workers else cpu_count()
+    print_if(args.verbose, VERBOSE['program_progress'], f"running on {workers} CPUs")
     for action in args.action:
         if action == 'init-DB':
             assert os.path.exists(args.data_path), f"could not locate data csv file at {args.data_path}"
             target = partial(create_new_records, args)
-            skipped = build_db(args, target=target)
+            skipped = build_db(args, target=target, workers=workers)
             return skipped
         if action == 'score-AFM':
             analyzer = Analyze.ProteinAnalyzer()
-            target = partial(calc_mutations_afm_scores, args, analyzer)
-            calc_afm_scores(args, target)
-
+            chunksize = adaptive_chunksize(AFM_ROWSIZE, 0.25)
+            n_muts, iter_num, total_iter, total_scores =len(glob.glob(pjoin(MUTATION_PATH, '*.txt'))), 1, \
+                                                        ceil(AFM_ROWS / chunksize), 0
+            print_if(args.verbose, VERBOSE['program_progress'], f"Calculating AlphaMissense scores...")
+            print(chunksize)
+            for chunk in afm_iterator(int(chunksize), usecols=['uniprot_id', 'protein_variant', 'am_pathogenicity']):
+                total_scores += calc_mutations_afm_scores(args, analyzer, chunk, f'iter {iter_num} of {total_iter} ',
+                                                     use_alias=False, recalc=False)
+                iter_num += 1
+            # Second run with aliases for mutations without scores
+            print_if(args.verbose, VERBOSE['program_progress'], f"Expending search for unresolved mutations...")
+            iter_num = 1
+            for chunk in afm_iterator(int(chunksize), usecols=['uniprot_id', 'protein_variant', 'am_pathogenicity']):
+                total_scores += calc_mutations_afm_scores(args, analyzer, chunk, f'iter {iter_num} of {total_iter}',
+                                                     use_alias=True, recalc=False)
+                iter_num += 1
+            print_if(args.verbose, VERBOSE['program_progress'], f"done, scored {total_scores} of {n_muts} mutations")
 
 
 if __name__ == "__main__":
