@@ -34,6 +34,7 @@ def create_afm_index():
         file.write(json.dumps(ranges))
     print('done')
 
+
 def download_data():
     print('Downloading AlphaMissense source data...')
     os.chdir(AFM_PATH)
@@ -42,10 +43,17 @@ def download_data():
     chunksize = adaptive_chunksize(AFM_ROWSIZE, DEFAULT_RAM_USAGE)
     ugzip(path=AFM_DATA + '.gz', outfile=AFM_DATA, chunksize=chunksize)
     os.chdir(ROOT_DIR)
+    print('Downloading EVEModel source data...')
+    os.chdir(EVE_PATH)
+    wget.download(EVE_PUBLIC_DATA, bar=progress_bar, out=EVE_PATH)
     print('done')
 
 if __name__ == '__main__':
     #create_directories()
     #download_data()
-    create_afm_index()
-
+    #create_afm_index()
+    print('Downloading EVEModel source data...')
+    os.chdir(EVE_PATH)
+    wget.download(EVE_PUBLIC_DATA, bar=progress_bar, out=EVE_PATH)
+    os.chdir(ROOT_DIR)
+    print('done')

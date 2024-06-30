@@ -178,7 +178,8 @@ class ProteinAnalyzer:
         :param prot_name as in Protein.name:
         :return: bool
         """
-        return prot_name in list(map(lambda x: os.path.basename(x)[:-10], glob.glob("DB/EVE/variant_files/")))
+        find_file = lambda x: os.path.basename(x)[:-10]
+        return prot_name in list(map(find_file, glob.glob(pjoin(EVE_DATA_PATH, '*'))))
 
     # TODO change eve db to work with unip - search by name might miss some proteins
     def score_mutation_evemodel(self, protein, mutation, prot_name=None):

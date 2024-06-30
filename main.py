@@ -8,7 +8,7 @@ from multiprocessing import cpu_count
 from multiprocessing.pool import ThreadPool as Pool
 import tqdm
 from functools import partial
-from utils import print_if, adaptive_chunksize, afm_iterator
+from utils import print_if, adaptive_chunksize, afm_iterator, warn_if
 from definitions import *
 import glob
 import time
@@ -240,7 +240,7 @@ def main(args):
             return skipped
         if action == 'score-AFM':
             analyzer = Analyze.ProteinAnalyzer()
-            chunksize = adaptive_chunksize(AFM_ROWSIZE, 0.25)
+            chunksize = adaptive_chunksize(AFM_ROWSIZE, LOW_MEM_RAM_USAGE)
             n_muts, iter_num, total_iter, total_scores =len(glob.glob(pjoin(MUTATION_PATH, '*.txt'))), 1, \
                                                         ceil(AFM_ROWS / chunksize), 0
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating AlphaMissense scores...")

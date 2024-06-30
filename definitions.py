@@ -40,6 +40,7 @@ DEFAULT_HEADER = "https://"
 #  MEMORY CONSTANTS
 
 DEFAULT_RAM_USAGE = 0.65
+LOW_MEM_RAM_USAGE = 0.25
 
 #  URLs
 
@@ -67,6 +68,7 @@ CON_ERR_FP_2 = "Connection Error in fetch_pdbs skipping pdb id {} for Uniprot id
 CON_ERR_UFN = "Connection Error in uid_from_name failed to fetch Uniprot IDs for protein {}"
 CON_ERR_FUS = "Connection Error in fetch_uniport_sequences while fetching isoforms for {}\nURL: "
 CON_ERR_GENERAL = "Connection Error in {} on protein {}"
+CON_ERR_DOWNLOAD_SOURCE = "Connection Error while downloading {} data"
 
 #  AMINO ACIDS UTILS
 
@@ -116,9 +118,13 @@ AFM_ROWS = 216175351
 
 #  EVE AND CPT DATA
 
+EVE_PUBLIC_DATA = 'https://evemodel.org/api/proteins/bulk/download/'
+EVE_PROTEIN_DOWNLOAD = 'https://evemodel.org/api/proteins/web_pid/{}/download/?variants=True'
 EVE_INDEX_PATH = pjoin(EVE_PATH, 'index_unip')
 EVE_INDEX_PATH_2 = pjoin(EVE_PATH, 'eve_index.txt')
 EVE_EXTENDED_INDEX_PATH = pjoin(EVE_PATH, 'index_unip_full')
 EVE_INVERSE_INDEX = pjoin(EVE_PATH, 'eve_reverse_index.txt')
+EVE_DATA = 'variant_files'
+EVE_DATA_PATH = pjoin(EVE_PATH, EVE_DATA)
 
 
