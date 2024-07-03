@@ -1,11 +1,7 @@
 import os
+from pathlib import Path
 import glob
 import warnings
-#import Family
-#import Patient
-#import Protein
-#import Mutation
-#import Pair
 import requests
 from requests.adapters import HTTPAdapter, Retry
 from definitions import *
@@ -14,6 +10,10 @@ import psutil
 import pandas as pd
 import gzip
 import shutil
+import hashlib
+from tqdm import tqdm
+import click
+
 
 ALPHAFOLD_PDB_URL = "https://alphafold.ebi.ac.uk/files/AF-{}-F1-model_v1.pdb"
 
@@ -59,10 +59,12 @@ def create_session(header, retries=5, wait_time=0.5, status_forcelist=None):
     s.mount(header, HTTPAdapter(max_retries=retries))
     return s
 
+
 def progress_bar(current, total, width=80):
-  progress_message = "Downloading: %d%% [%d / %d] bytes" % (current / total * 100, current, total)
-  sys.stdout.write("\r" + progress_message)
-  sys.stdout.flush()
+    progress_message = "Downloading: %d%% [%d / %d] bytes" % (current / total * 100, current, total)
+    sys.stdout.write("\r" + progress_message)
+    sys.stdout.flush()
+
 
 def safe_get_request(session, url, timeout, verbose_level, warning_msg='connection failed', return_on_failure=None,
                      warning_thr=VERBOSE['thread_warnings'], raw_err_thr=VERBOSE['raw_warnings']):
@@ -119,7 +121,7 @@ def make_fasta(path, name, seq):
         file.write(f"{seq}\n")
 
 
-def adaptive_chunksize(rowsize, ram_usage = 0.5):
+def adaptive_chunksize(rowsize, ram_usage=0.5):
     """
     
     :param rowsize: float size of dataframe row in bits
@@ -129,6 +131,7 @@ def adaptive_chunksize(rowsize, ram_usage = 0.5):
     """
     available = psutil.virtual_memory().available * ram_usage
     return available // rowsize
+
 
 def afm_iterator(chunksize, usecols=None):
     """
@@ -140,11 +143,11 @@ def afm_iterator(chunksize, usecols=None):
                              header=AFM_HEADER, usecols=usecols):
         yield chunk
 
+
 def afm_range_read(idx_from, idx_to, usecols=None):
     nrows = idx_to - idx_from
     return pd.read_csv(AFM_DATA_PATH, sep='\t', names=AFM_COL_NAMES, header=AFM_HEADER, skiprows=idx_from,
                        nrows=nrows, usecols=usecols)
-
 
 
 def ugzip(path, outfile, chunksize):
@@ -161,6 +164,7 @@ def ugzip(path, outfile, chunksize):
             while chunk:
                 f_out.write(chunk)
                 chunk = f_in.read(chunksize)
+
 
 def generate_proteins(proteins):
     """
@@ -299,6 +303,160 @@ def find_mutations_with_pdbs(protein, log="log.txt", found='found.txt'):
                 file.write(f"{protein.name} - {mut_obj} - {mut_obj.pdbs}\n")
 
 
+class SafeDownloader:
+    """
+    code by tobiasraabe - Tobias Raabe
+    cloned from https://gist.github.com/58adee67de619ce621464c1a6511d7d9.git
+    """
+
+    def __init__(self, urls, file_names, url_hashes=None, outfile='.', url_base='', block_size=1024, verbose_level=1):
+        """
+        :param urls: list of urls to download,
+        :param url_hashes: hash or urls in format sha256 lowercase
+        :param file_names: list of strings names save names of files
+        :param outfile: string directory to download to
+        :param url_base: optional - shared url base for readability
+        :param block_size: int size in bits of download blocks
+        """
+        self.base = url_base
+        self.urls = urls
+        self.url_hashes = url_hashes
+        self.file_names = file_names
+        self.outfile = Path(outfile)
+        self.block_size = block_size
+        self._v = verbose_level
+        self._context_setting = dict(help_option_names=['-h', '--help'])
+
+    def downloader(self, position: int, resume_byte_pos: int = None):
+        """Download url in ``URLS[position]`` to disk with possible resumption.
+
+        Parameters
+        ----------
+        position: int
+            Position of url.
+        resume_byte_pos: int
+            Position of byte from where to resume the download
+
+        """
+        # Get size of file
+        url = self.urls[position]
+        r = requests.head(url)
+        file_size = int(r.headers.get('content-length', 0))
+
+        # Append information to resume download at specific byte position
+        # to header
+        resume_header = ({'Range': f'bytes={resume_byte_pos}-'}
+                         if resume_byte_pos else None)
+
+        # Establish connection
+        r = requests.get(url, stream=True, headers=resume_header)
+
+        # Set configuration
+        initial_pos = resume_byte_pos if resume_byte_pos else 0
+        mode = 'ab' if resume_byte_pos else 'wb'
+        file = self.outfile / self.file_names[position]
+
+        with open(file, mode) as f:
+            with tqdm(total=file_size, unit='B',
+                      unit_scale=True, unit_divisor=self.block_size,
+                      desc=file.name, initial=initial_pos,
+                      ascii=True, miniters=1) as pbar:
+                for chunk in r.iter_content(32 * self.block_size):
+                    f.write(chunk)
+                    pbar.update(len(chunk))
+
+    def download_file(self, position: int) -> None:
+        """Execute the correct download operation.
+
+        Depending on the size of the file online and offline, resume the
+        download if the file offline is smaller than online.
+
+        Parameters
+        ----------
+        position: int
+            Position of url.
+
+        """
+        # Establish connection to header of file
+        url = self.urls[position]
+        r = requests.head(url)
+
+        # Get filesize of online and offline file
+        file_size_online = int(r.headers.get('content-length', 0))
+        file = self.outfile / self.file_names[position]
+
+        if file.exists():
+            file_size_offline = file.stat().st_size
+
+            if file_size_online != file_size_offline:
+                print_if(self._v, VERBOSE['program_warning'], DOWNLOAD_INCOMPLETE_WRN.format(file))
+                self.downloader(position, file_size_offline)
+            else:
+                print_if(self._v, VERBOSE['program_progress'], DOWNLOAD_COMPLETE_MSG.format(file))
+                pass
+        else:
+            print_if(self._v, VERBOSE['program_progress'], DOWNLOAD_START_MSG.format(file))
+            self.downloader(position)
+
+    def validate_file(self, position: int) -> None:
+        """Validate a given file with its hash.
+
+        The downloaded file is hashed and compared to a pre-registered
+        has value to validate the download procedure.
+
+        Parameters
+        ----------
+        position: int
+            Position of url and hash.
+
+        """
+        file = self.outfile / self.file_names[position]
+        try:
+            hash = self.url_hashes[position]
+        except IndexError:
+            print_if(self._v, VERBOSE['program_warning'], DOWNLOAD_NO_HASH_ERR.format(file.name))
+            return 0
+
+        sha = hashlib.sha256()
+        with open(file, 'rb') as f:
+            while True:
+                chunk = f.read(1000 * 1000)  # 1MB so that memory is not exhausted
+                if not chunk:
+                    break
+                sha.update(chunk)
+        try:
+            assert sha.hexdigest() == hash
+        except AssertionError:
+            file = self.file_names[position]
+            print_if(self._v, VERBOSE['program_warning'], DOWNLOAD_CORRUPTION_ERR.format(file))
+        else:
+            print_if(self._v, VERBOSE['program_progress'], DOWNLOAD_VALIDATION_MSG.format(file))
+
+    @click.group(context_settings=CONTEXT_SETTINGS, chain=True)
+    def cli(self):
+        """Program for downloading and validating files.
+
+        It is possible to run both operations consecutively with
+
+        .. code-block:: shell
+
+            $ python python-downloader.py download validate
+
+        To download a file, add the link to ``URLS`` and its hash to ``HASHES`` if
+        you want to validate downloaded files.
+
+        """
+        pass
+
+    def download(self):
+        """Download files specified in ``URLS``."""
+        for position in range(len(self.urls)):
+            self.download_file(position)
+
+    def validate(self):
+        """Validate downloads with hashes in ``HASHES``."""
+        for position in range(len(self.urls)):
+            self.validate_file(position)
 
 '''
 def _firm_setup(ref_gen='GRCh37', n_threads=4):

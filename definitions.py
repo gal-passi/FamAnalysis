@@ -1,6 +1,8 @@
 from os.path import dirname, abspath
 from os.path import join as pjoin
-import json
+from hashlib import sha256
+
+hash_url = lambda url: sha256(url).hexdigest()
 
 #  CONTACT INFO CHANGE TO YOUR EMAIL
 
@@ -11,13 +13,14 @@ HEADERS = {'User-Agent': 'Python {}'.format(CONTACT)}
 
 VERBOSE = {'critical': 0, 'program_warning': 1, 'program_progress': 1,
            'thread_warnings': 2, 'thread_progress': 3, 'raw_warnings': 3}
+CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 
 #  DIRECTORIES
 
 ROOT_DIR = dirname(abspath(__file__))
 DB = 'DB'
 DB_CHILDREN = ['AFM', 'CPT', 'EVE', 'Family', 'mutations', 'Patients', 'proteins']
-CHILDREN_INDEX = {child:i for i, child in enumerate(DB_CHILDREN)}
+CHILDREN_INDEX = {child: i for i, child in enumerate(DB_CHILDREN)}
 DB_PATH = pjoin(ROOT_DIR, DB)
 PROTEINS = 'test_p'
 PROTEIN_PATH = pjoin(DB_PATH, PROTEINS)
@@ -70,11 +73,18 @@ CON_ERR_FUS = "Connection Error in fetch_uniport_sequences while fetching isofor
 CON_ERR_GENERAL = "Connection Error in {} on protein {}"
 CON_ERR_DOWNLOAD_SOURCE = "Connection Error while downloading {} data"
 
+DOWNLOAD_INCOMPLETE_WRN = 'File {} is incomplete. Resume download.'
+DOWNLOAD_COMPLETE_MSG = 'File {} is complete. Skip download.'
+DOWNLOAD_START_MSG = 'File {} does not exist. Start download.'
+DOWNLOAD_CORRUPTION_ERR = 'File {} is corrupt. Delete it manually and restart the program.'
+DOWNLOAD_NO_HASH_ERR = 'File {} has no hash.'
+DOWNLOAD_VALIDATION_MSG = 'File {} is validated.'
+
 #  AMINO ACIDS UTILS
 
 AA_SYN = {"A": "ALA", "C": "CYS", "D": "ASP", "E": "GLU", "F": "PHE", "G": "GLY", "H": "HIS", "I": "ILE",
-              "K": "LYS", "L": "LEU", "M": "MET", "N": "ASN", "P": "PRO", "Q": "GLN", "R": "ARG", "S": "SER",
-              "T": "THR", "V": "VAL", "W": "TRP", "Y": "TYR"}
+          "K": "LYS", "L": "LEU", "M": "MET", "N": "ASN", "P": "PRO", "Q": "GLN", "R": "ARG", "S": "SER",
+          "T": "THR", "V": "VAL", "W": "TRP", "Y": "TYR"}
 AA_SYN_REV = dict((v, k) for k, v in AA_SYN.items())
 
 #  SCORING MODELS
@@ -84,21 +94,19 @@ EVE_SCORE = 'eveScore'
 EVE_PREDICTION = 'evePrediction'
 ESM_SCORE = 'bertScore'
 AFM_SCORE = 'afmScore'
-AVAILABLE_MODELS = {'EVE',  'ESM', 'AFM'}
+AVAILABLE_MODELS = {'EVE', 'ESM', 'AFM'}
 MODELS_SCORES = {'EVE': 'eveScore', 'ESM': 'bertScore', 'AFM': 'afmScore', 'FIRM': 'firmScore'}
 NO_SCORE = -1.0
 
 # ANALYZER CONSTANTS
 
 
-
 #  PROTEINS CONSTANTS
 
 PROTEIN_ALIASES = {'LOC100287896': 'LIPT2', 'FPGT-TNNI3K': 'TNNI3K', 'ATPSJ2-PTCD1': 'PTCD1', 'CCL4L1': 'CCL4L2',
-                'PTGDR2': 'CCDC86', '4-SEPT': 'SEPT4'}
+                   'PTGDR2': 'CCDC86', '4-SEPT': 'SEPT4'}
 NEW_MUTATION_DATA = {'chr': None, 'ref_na': None, 'alt_na': None, 'start': None, 'end': None, AFM_SCORE: NO_SCORE,
-                        EVE_SCORE: NO_SCORE, ESM_SCORE: tuple(), EVE_PREDICTION: NO_SCORE}
-
+                     EVE_SCORE: NO_SCORE, ESM_SCORE: tuple(), EVE_PREDICTION: NO_SCORE}
 
 #  ALPHA MISSENSE DATA
 
@@ -119,12 +127,24 @@ AFM_ROWS = 216175351
 #  EVE AND CPT DATA
 
 EVE_PUBLIC_DATA = 'https://evemodel.org/api/proteins/bulk/download/'
-EVE_PROTEIN_DOWNLOAD = 'https://evemodel.org/api/proteins/web_pid/{}/download/?variants=True'
-EVE_INDEX_PATH = pjoin(EVE_PATH, 'index_unip')
+EVE_SINGLE_PROTEIN = 'https://evemodel.org/api/proteins/web_pid/{}/download/?variants=True'
+#  to avoid downloading the entire eve dataset insert specific entities e.g BRCA1_HUMAN
+EVE_PARTIAL_DOWNLOAD = []
 EVE_INDEX_PATH_2 = pjoin(EVE_PATH, 'eve_index.txt')
 EVE_EXTENDED_INDEX_PATH = pjoin(EVE_PATH, 'index_unip_full')
 EVE_INVERSE_INDEX = pjoin(EVE_PATH, 'eve_reverse_index.txt')
-EVE_DATA = 'variant_files'
+EVE_DATA = 'EVE_all_data'
 EVE_DATA_PATH = pjoin(EVE_PATH, EVE_DATA)
+EVE_PROT_DOWNLOAD_MSG = "Downloading protein {} from EVE"
 
+CPT_DOWNLOAD_BASE = 'https://zenodo.org/records/7954657/files/'
+CPT_EVE_DATA = f'{CPT_DOWNLOAD_BASE}CPT1_score_EVE_set.zip?download=1'
+CPT_EVE_DATA_HASH = hash_url(CPT_EVE_DATA.encode())
+CPT_EVE_DATA_NAME = 'CPT1_score_EVE_set'
+CPT_IMPUTE_DATA_1 = f'{CPT_DOWNLOAD_BASE}CPT1_score_no_EVE_set_1.zip?download=1'
+CPT_IMPUTE_DATA_1_HASH = hash_url(CPT_IMPUTE_DATA_1.encode())
+CPT_IMPUTE_DATA_1_NAME = 'CPT1_score_no_EVE_set_1'
+CPT_IMPUTE_DATA_2 = f'{CPT_DOWNLOAD_BASE}CPT1_score_no_EVE_set_2.zip?download=1'
+CPT_IMPUTE_DATA_2_HASH = hash_url(CPT_IMPUTE_DATA_2.encode())
+CPT_IMPUTE_DATA_2_NAME = 'CPT1_score_no_EVE_set_2'
 

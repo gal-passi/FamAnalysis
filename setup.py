@@ -1,10 +1,14 @@
+import glob
+
 from utils import progress_bar, afm_iterator, adaptive_chunksize, ugzip
+from utils import SafeDownloader
 from definitions import *
 import os
 from os.path import join as pjoin
 import wget
 import json
 import pandas as pd
+import zipfile
 
 
 def create_directories():
@@ -34,26 +38,73 @@ def create_afm_index():
         file.write(json.dumps(ranges))
     print('done')
 
-
-def download_data():
-    print('Downloading AlphaMissense source data...')
+def download_afm():
     os.chdir(AFM_PATH)
-    wget.download(url=AFM_PUBLIC_DATA, bar=progress_bar, out=AFM_PATH)
+    downloader = SafeDownloader([AFM_PUBLIC_DATA], [AFM_DATA])
+    print('Downloading AlphaMissense source data...')
+    downloader.download()
     print('Unzipping AlphaMissense data...')
     chunksize = adaptive_chunksize(AFM_ROWSIZE, DEFAULT_RAM_USAGE)
     ugzip(path=AFM_DATA + '.gz', outfile=AFM_DATA, chunksize=chunksize)
     os.chdir(ROOT_DIR)
-    print('Downloading EVEModel source data...')
-    os.chdir(EVE_PATH)
-    wget.download(EVE_PUBLIC_DATA, bar=progress_bar, out=EVE_PATH)
     print('done')
+
+def download_eve():
+    os.chdir(EVE_PATH)
+    if EVE_PARTIAL_DOWNLOAD:
+        urls = [EVE_SINGLE_PROTEIN.format(name) for name in EVE_PARTIAL_DOWNLOAD]
+        names = [name + '.zip' for name in EVE_PARTIAL_DOWNLOAD]
+        downloader = SafeDownloader(urls, names)
+    else:
+        downloader = SafeDownloader([EVE_PUBLIC_DATA], [EVE_DATA + '.zip'])
+    print('Downloading EVEModel source data...')
+    downloader.download()
+    print('Unzipping EVEModel data...')
+    if EVE_PARTIAL_DOWNLOAD:
+        for name in names:
+            with zipfile.ZipFile(name + '.zip', "r") as zip_ref:
+                zip_ref.extractall(name+'.csv')
+    else:
+        with zipfile.ZipFile(EVE_DATA + '.zip', "r") as zip_ref:
+            zip_ref.extractall(EVE_DATA)
+        for name in glob.glob(EVE_DATA):
+            with zipfile.ZipFile(name, "r") as zip_ref:
+                zip_ref.extractall(os.path.basename(name) + '.csv')
+    os.chdir(ROOT_DIR)
+    print('done')
+
+def download_cpt():
+    os.chdir(CPT_PATH)
+    filenames = [CPT_EVE_DATA_NAME + '.zip', CPT_IMPUTE_DATA_1_NAME + '.zip',
+                                 CPT_IMPUTE_DATA_2_NAME + '.zip']
+    downloader = SafeDownloader([CPT_EVE_DATA, CPT_IMPUTE_DATA_1, CPT_IMPUTE_DATA_2], filenames)
+    print('Downloading CPT source data...')
+    downloader.download()
+    print('Unzipping EVEModel data...')
+    for name in filenames:
+        with zipfile.ZipFile(name, "r") as zip_ref:
+            zip_ref.extractall(name[:-4])
+
+def download_all_data():
+    download_afm()
+    download_eve()
+    download_cpt()
 
 if __name__ == '__main__':
     #create_directories()
     #download_data()
     #create_afm_index()
-    print('Downloading EVEModel source data...')
-    os.chdir(EVE_PATH)
-    wget.download(EVE_PUBLIC_DATA, bar=progress_bar, out=EVE_PATH)
+    #downloader_ = SafeDownloader([CPT_EVE_DATA], [CPT_EVE_DATA_HASH], [CPT_EVE_DATA_NAME])
+    #os.chdir(CPT_PATH)
+    #downloader_.download()
+    path = pjoin(CPT_PATH, CPT_EVE_DATA_NAME)
+    print()
+    with zipfile.ZipFile(path, "r") as zip_ref:
+        zip_ref.extractall(CPT_PATH)
+    path = pjoin(path[:-4], 'BRCA2_HUMAN.csv.gz')
+    print(path)
+    ugzip(path=path, outfile=path[:-3], chunksize=10**6)
+    #ugzip(path=AFM_DATA + '.gz', outfile=AFM_DATA, chunksize=10**6)
+    #wget.download(EVE_PUBLIC_DATA, bar=progress_bar, out=EVE_PATH)
     os.chdir(ROOT_DIR)
     print('done')

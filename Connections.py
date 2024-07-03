@@ -3,8 +3,9 @@ from urllib.error import HTTPError as HTTPError
 import re
 from definitions import *
 from utils import print_if, warn_if, create_session, safe_post_request, safe_get_request
-
-
+from utils import progress_bar
+import wget
+from os.path import basename
 
 
 class Uniport:
@@ -39,12 +40,12 @@ class Uniport:
                 print_if(self._v, VERBOSE['thread_progress'], "done")
                 return sequences
             if not expend:
-                sequences[f"iso_{index}"] = self.remove_whitespaces(seq[seq.find("\n")+1:])  # remove header
+                sequences[f"iso_{index}"] = self.remove_whitespaces(seq[seq.find("\n") + 1:])  # remove header
             else:
-                sequences[f"{Uid}_iso_{index}"] = self.remove_whitespaces(seq[seq.find("\n")+1:])
+                sequences[f"{Uid}_iso_{index}"] = self.remove_whitespaces(seq[seq.find("\n") + 1:])
             index += 1
 
-    def expend_isoforms(self, prot, limit=20, unique_key = ''):
+    def expend_isoforms(self, prot, limit=20, unique_key=''):
         """
         will add all known isoforms of prot.name including non-reviewed
         will be returned in form {uid_iso:...}
@@ -68,7 +69,7 @@ class Uniport:
             return {}
         uids = r.text.split("\n")
         print_if(self._v, VERBOSE['thread_progress'], f"found {len(uids) - 2} uids")
-        for uid in r.text.split("\n")[1:limit+1]:
+        for uid in r.text.split("\n")[1:limit + 1]:
             if uid == '':
                 return isoforms
             res = self.fetch_uniport_sequences(uid, expend=True)
@@ -98,7 +99,7 @@ class Uniport:
         if not Uid:
             return {}
 
-        #params = {'format': 'tab', 'query': 'ID:{}'.format(Uid), 'columns': 'id,database(PDB)'}
+        # params = {'format': 'tab', 'query': 'ID:{}'.format(Uid), 'columns': 'id,database(PDB)'}
         s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
         query = UNIPORT_QUERY_URL + Q_PDBS_UID.format(Uid)
         print_if(self._v, VERBOSE['thread_progress'], f"Fetching Pdb ids for {Uid}...")
@@ -132,17 +133,17 @@ class Uniport:
         UIDS = 0
         if reviewed:
             query = UNIPORT_QUERY_URL + Q_UID_PROT.format(name, 'true')
-            #params = {'format': 'tab', 'query': f"gene_exact:{name} AND organism:homo_sapiens AND reviewed:yes", 'columns': 'id'}
+            # params = {'format': 'tab', 'query': f"gene_exact:{name} AND organism:homo_sapiens AND reviewed:yes", 'columns': 'id'}
         else:
             query = UNIPORT_QUERY_URL + Q_UID_PROT.format(name, 'false')
-            #params = {'format': 'tab', 'query': f"gene_exact:{name} AND organism:homo_sapiens", 'columns': 'id'}
+            # params = {'format': 'tab', 'query': f"gene_exact:{name} AND organism:homo_sapiens", 'columns': 'id'}
         s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
-        #r = req.get(query, timeout=TIMEOUT)
+        # r = req.get(query, timeout=TIMEOUT)
         r = safe_get_request(s, query, TIMEOUT, self._v, CON_ERR_UFN.format(name))
         if not r:
             return []
         if r.text == '':
-                return []
+            return []
         rows = r.text.split('\n')
         uids = [row.split('\t')[UIDS] for row in rows[1:-1]]
         if len(uids) == 0:
@@ -162,7 +163,7 @@ class Uniport:
         name = ref_name if ref_name else protein.name
         url = Q_UNIP_ENTERY.format(name)
         s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
-        #r = req.get(url, timeout=TIMEOUT)
+        # r = req.get(url, timeout=TIMEOUT)
         r = safe_get_request(s, url, TIMEOUT, self._v, CON_ERR_GENERAL.format('entery_name', name))
         if not r:
             return ''
@@ -184,7 +185,7 @@ class Uniport:
         search_term = protein.Uid if protein else by_name
         url = Q_UNIP_ENTERY_ALIAS.format(search_term)
         s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
-        #r = req.get(url, timeout=TIMEOUT)
+        # r = req.get(url, timeout=TIMEOUT)
         r = safe_get_request(s, url, TIMEOUT, self._v, CON_ERR_GENERAL.format('synonms', search_term))
         if not r:
             return ''
@@ -194,7 +195,6 @@ class Uniport:
         for line in r.text.split('\n')[1:-1]:
             res += line.split('\t')[4].split(" ")
         return res
-
 
     def fatch_all_NCBIs(self, ncbi_id):
         idx = 0
@@ -216,7 +216,8 @@ class Uniport:
         try:
             handle = Entrez.efetch(db="nucleotide", id=ncbi_id, retmode="xml")
         except HTTPError as e:
-            warn_if(self._v, VERBOSE['thread_warnings'],  f'Unable to fetch NCBI record with id {ncbi_id} HTTPError...skipping')
+            warn_if(self._v, VERBOSE['thread_warnings'],
+                    f'Unable to fetch NCBI record with id {ncbi_id} HTTPError...skipping')
             warn_if(self._v, VERBOSE['raw_warnings'], f'\n{e}')
             return {}
         records = Entrez.read(handle)
@@ -226,7 +227,7 @@ class Uniport:
                     for sub_dict in dict_entry["GBFeature_quals"]:
                         if sub_dict['GBQualifier_name'] == 'translation':
                             print_if(self._v, VERBOSE['thread_progress'], f"done")
-                            return{ncbi_id: sub_dict["GBQualifier_value"]}
+                            return {ncbi_id: sub_dict["GBQualifier_value"]}
         except Exception as e:
             warn_if(self._v, VERBOSE['thread_warnings'], f'Unable to fetch NCBI record with id {ncbi_id}...skipping')
             warn_if(self._v, VERBOSE['raw_warnings'], f'\n{e}')
@@ -237,9 +238,9 @@ class Uniport:
         returns confidence of alphafold model - if unable to find or model or sequences don't match return -1
         """
         s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
-        #resp = req.get(ALPHAFOLD_PDB_URL.format(prot.Uid), timeout=TIMEOUT)
+        # resp = req.get(ALPHAFOLD_PDB_URL.format(prot.Uid), timeout=TIMEOUT)
         resp = safe_get_request(s, ALPHAFOLD_PDB_URL.format(prot.Uid), TIMEOUT, self._v,
-                             CON_ERR_GENERAL.format('alphafold_confidence', prot.Uid))
+                                CON_ERR_GENERAL.format('alphafold_confidence', prot.Uid))
         if not resp:
             return -1
         if not resp.ok:
@@ -252,24 +253,26 @@ class Uniport:
         if len(relavent_confidence) < 1:
             # try to find in sequence assumes reference length of 10
             if not mut.ref_seqs:
-                warn_if(self._v, VERBOSE['thread_warnings'], f"Failed to find residue {mut.origAA} in {mut.loc} -- no ref seqs")
+                warn_if(self._v, VERBOSE['thread_warnings'],
+                        f"Failed to find residue {mut.origAA} in {mut.loc} -- no ref seqs")
                 return -1
             sequence = self._obtain_seq(resp)
             ref = next(iter(mut.ref_seqs.values()))
             index = sequence.find(ref)
             if index == -1:
-                warn_if(self._v, VERBOSE['thread_warnings'], f"Faild to find residue {mut.origAA} in {mut.loc} -- can't find reference in sequence")
+                warn_if(self._v, VERBOSE['thread_warnings'],
+                        f"Faild to find residue {mut.origAA} in {mut.loc} -- can't find reference in sequence")
                 return -1
             # if reference sequence is not 10 need to change "5"
             relavent_confidence = [float(i[61:66]) for i in resp.content.split(b"\n") if
-                                   i.startswith(b"ATOM  ") and int(i[22:26]) == index+6]
+                                   i.startswith(b"ATOM  ") and int(i[22:26]) == index + 6]
 
         return relavent_confidence[0]
 
     def alpha_seq(self, prot):
         s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
         resp = safe_get_request(s, ALPHAFOLD_PDB_URL.format(prot.Uid), TIMEOUT, self._v,
-                                 CON_ERR_GENERAL.format('alpha_seq', prot.Uid))
+                                CON_ERR_GENERAL.format('alpha_seq', prot.Uid))
         if not resp:
             return {}
         if not resp.ok:
@@ -300,7 +303,27 @@ class Uniport:
         :param path: str directory to save the file to
         :return:
         """
-        self.pdpl.retrieve_pdb_file(id, pdir=path, file_format="pdb" )
+        self.pdpl.retrieve_pdb_file(id, pdir=path, file_format="pdb")
 
-
-
+    def download_eve_data(self, prot_name):
+        """
+        :param prot_names: str
+        :return: bool True is successful
+        """
+        s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
+        existing_files = {basename(p)[:-4] for p in pjoin(EVE_PATH, '*.csv')}
+        name = prot_name + '_HUMAN'
+        if name in existing_files:
+            return True
+        url = EVE_SINGLE_PROTEIN.format(name)
+        if s.get(url, timeout=TIMEOUT).ok:
+            print_if(self._v, VERBOSE['thread_progress'], EVE_PROT_DOWNLOAD_MSG.format(prot_name))
+            for _ in RETRIES:
+                try:
+                    wget.download(url, bar=progress_bar, out=EVE_DATA_PATH)
+                    return True
+                except:
+                    pass
+            return False
+        else:
+            return False

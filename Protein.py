@@ -121,6 +121,10 @@ class Protein:
     def interactions(self):
         return Analyze.ProteinAnalyzer().interactions(self)
 
+    @property
+    def aliases(self):
+        return self._Uids['aliases']
+
     def entery_name(self, all=False):
         return self._Uids['main_entery'] if not all else self._Uids['all_enteries']
 
@@ -204,7 +208,8 @@ class Protein:
         uids = {'reviewed': self._unip.uid_from_name(self.name, reviewed=True, all=True),
                 'non_reviewed': self._unip.uid_from_name(self.name, reviewed=False, all=True),
                 'main_entery': self._unip.entery_name(self),
-                'all_enteries': self._unip.entery_name(self, all_results=True)}
+                'all_enteries': self._unip.entery_name(self, all_results=True),
+                'aliases': self._unip.synonms(by_name=self.name)}
         if uniprot_id:
             uids['reviewed'].append(uniprot_id)
         self._Uids = uids

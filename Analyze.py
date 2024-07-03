@@ -42,7 +42,7 @@ class ProteinAnalyzer:
         self.proteins = {protein.name: protein for protein in proteins}
         self._cpt_ingene = set([Path(i).with_suffix('').stem for i in glob.glob(f"{pjoin(CPT_INGENE_PATH, '*.csv*')}")])
         self._cpt_exgene = set([Path(i).with_suffix('').stem for i in glob.glob(f"{pjoin(CPT_EXGENE_PATH, '*.csv*')}")])
-        self.eve_records = list(map(lambda x: os.path.basename(x)[:-10], glob.glob(EVE_PATH + "*.csv")))
+        self.eve_records = {os.path.basename(p)[:-10] for p in glob.glob(pjoin(EVE_PATH, '*.csv'))}
         #with open(EVE_INDEX_PATH, "rb") as fp:   # Unpickling
         #    self.eve_index_unip = pickle.load(fp)
         #with open(EVE_EXTENDED_INDEX_PATH, "rb") as fp:   # Unpickling
@@ -190,22 +190,25 @@ class ProteinAnalyzer:
         :return: (score, prediction) if not found (-1,-1)
         """
         search_name = protein.name if not prot_name else prot_name
-        #print(f"searching using {search_name}")
         if search_name in self.eve_records:
             res = self._eve_interperter(search_name, mutation)
             if res != (-1, -1):
                 return res
-        for alias in self._unip.synonms(protein):
+        for alias in protein.aliases:
             if alias in self.eve_records:
                 res = self._eve_interperter(alias, mutation)
                 if res != (-1, -1):
                     return res
+        #  check if protein name is an alias of a protein covered by EVE
         if search_name in self.eve_reverse_index:
-            for eve_data in set(self.eve_reverse_index[search_name]):
-                #print(f"trying with new searching using {eve_data}")
-                res = self._eve_interperter(eve_data, mutation)
-                if res != (-1, -1):
-                    return res
+            for name in set(self.eve_reverse_index[search_name]):
+                #  if successfully downloaded or already exists search for variant
+                if self._unip.download_eve_data(name):
+                    res = self._eve_interperter(name, mutation)
+                    if res != (-1, -1):
+                        return res
+                else:
+                    continue
         return -1, -1
 
     def _eve_interperter(self, prot_name, mutation):

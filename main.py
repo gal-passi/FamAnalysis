@@ -201,7 +201,6 @@ def build_db(args, target, workers):
     return skipped
 
 
-#def calc_mutations_afm_scores(args, analyzer, chunk=None, *mutations):
 def calc_mutations_afm_scores(args, analyzer, chunk=None, iter_desc='', use_alias=False, recalc=False):
     """
     calculates Alpha Missense scores for all the mutations of a specific protein
@@ -229,9 +228,25 @@ def calc_mutations_afm_scores(args, analyzer, chunk=None, iter_desc='', use_alia
     return successful
 
 
+def calc_mutations_eve_scores(args, analyzer, recalc=False, iter_desc=''):
+    successful = 0
+    if recalc:
+        tasks = list(all_mutations())
+    else:
+        tasks = [mut for mut in all_mutations() if not mut.has_eve]
+    n_muts = len(tasks)
+    for mutation in tqdm.tqdm(tasks, desc=iter_desc, total=n_muts):
+        print_if(args.verbose, VERBOSE['thread_progress'], f"Calculating EVEModel scores for {mutation.long_name}")
+        score, prediction = analyzer.score_mutation_evemodel(protein=mutation.protein, mutation=mutation)
+        successful += score != -1
+        mutation.update_score('ESM', score)
+    return successful
+
+
 def main(args):
     workers = args.workers if args.workers else cpu_count()
     print_if(args.verbose, VERBOSE['program_progress'], f"running on {workers} CPUs")
+    analyzer = Analyze.ProteinAnalyzer()
     for action in args.action:
         if action == 'init-DB':
             assert os.path.exists(args.data_path), f"could not locate data csv file at {args.data_path}"
@@ -239,12 +254,10 @@ def main(args):
             skipped = build_db(args, target=target, workers=workers)
             return skipped
         if action == 'score-AFM':
-            analyzer = Analyze.ProteinAnalyzer()
             chunksize = adaptive_chunksize(AFM_ROWSIZE, LOW_MEM_RAM_USAGE)
             n_muts, iter_num, total_iter, total_scores =len(glob.glob(pjoin(MUTATION_PATH, '*.txt'))), 1, \
                                                         ceil(AFM_ROWS / chunksize), 0
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating AlphaMissense scores...")
-            print(chunksize)
             for chunk in afm_iterator(int(chunksize), usecols=['uniprot_id', 'protein_variant', 'am_pathogenicity']):
                 total_scores += calc_mutations_afm_scores(args, analyzer, chunk, f'iter {iter_num} of {total_iter} ',
                                                      use_alias=False, recalc=False)
@@ -257,6 +270,12 @@ def main(args):
                                                      use_alias=True, recalc=False)
                 iter_num += 1
             print_if(args.verbose, VERBOSE['program_progress'], f"done, scored {total_scores} of {n_muts} mutations")
+        if action == 'score-EVE':
+            n_muts = len(glob.glob(pjoin(MUTATION_PATH, '*.txt')))
+            total_scores = calc_mutations_eve_scores(args, analyzer, recalc=False)
+            print_if(args.verbose, VERBOSE['program_progress'], f"done, scored {total_scores} of {n_muts} mutations")
+
+
 
 
 if __name__ == "__main__":

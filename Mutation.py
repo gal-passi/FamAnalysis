@@ -306,7 +306,7 @@ class Mutation:
 
     @property
     def has_eve(self):
-        return self.eve_score != -1
+        return self.eve_score not in [None, -1]
 
     @property
     def afm_score(self):
