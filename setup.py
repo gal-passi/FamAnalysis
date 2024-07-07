@@ -5,10 +5,9 @@ from utils import SafeDownloader
 from definitions import *
 import os
 from os.path import join as pjoin
-import wget
 import json
-import pandas as pd
 import zipfile
+import shutil
 
 
 def create_directories():
@@ -49,7 +48,7 @@ def download_afm():
     os.chdir(ROOT_DIR)
     print('done')
 
-def download_eve():
+def download_eve(remove_zip=True):
     os.chdir(EVE_PATH)
     if EVE_PARTIAL_DOWNLOAD:
         urls = [EVE_SINGLE_PROTEIN.format(name) for name in EVE_PARTIAL_DOWNLOAD]
@@ -67,13 +66,16 @@ def download_eve():
     else:
         with zipfile.ZipFile(EVE_DATA + '.zip', "r") as zip_ref:
             zip_ref.extractall(EVE_DATA)
-        for name in glob.glob(EVE_DATA):
-            with zipfile.ZipFile(name, "r") as zip_ref:
-                zip_ref.extractall(os.path.basename(name) + '.csv')
+        if remove_zip:
+            os.remove(EVE_DATA + '.zip')
+        os.chdir(EVE_DATA_PATH)
+        for file in os.listdir('.'):
+            if os.path.basename(file) != EVE_VARIANTS:
+                shutil.rmtree(file)
     os.chdir(ROOT_DIR)
     print('done')
 
-def download_cpt():
+def download_cpt(remove_zip=True):
     os.chdir(CPT_PATH)
     filenames = [CPT_EVE_DATA_NAME + '.zip', CPT_IMPUTE_DATA_1_NAME + '.zip',
                                  CPT_IMPUTE_DATA_2_NAME + '.zip']
@@ -84,27 +86,27 @@ def download_cpt():
     for name in filenames:
         with zipfile.ZipFile(name, "r") as zip_ref:
             zip_ref.extractall(name[:-4])
+    # MERGE EVE IMPUTE FOLDERS
+    shutil.copytree(CPT_EVE_IMPUTE_PATH_2, CPT_EVE_IMPUTE_PATH_1, dirs_exist_ok=True)
+    os.rename(CPT_IMPUTE_DATA_1_NAME, CPT_IMPUTE_DATA_NAME)
+    shutil.rmtree(CPT_IMPUTE_DATA_2_NAME)
+    if remove_zip:
+        for file in filenames:
+            os.remove(file)
+    os.chdir(ROOT_DIR)
+    print('done')
 
 def download_all_data():
     download_afm()
     download_eve()
     download_cpt()
 
+
 if __name__ == '__main__':
     #create_directories()
     #download_data()
     #create_afm_index()
-    #downloader_ = SafeDownloader([CPT_EVE_DATA], [CPT_EVE_DATA_HASH], [CPT_EVE_DATA_NAME])
-    #os.chdir(CPT_PATH)
-    #downloader_.download()
-    path = pjoin(CPT_PATH, CPT_EVE_DATA_NAME)
-    print()
-    with zipfile.ZipFile(path, "r") as zip_ref:
-        zip_ref.extractall(CPT_PATH)
-    path = pjoin(path[:-4], 'BRCA2_HUMAN.csv.gz')
-    print(path)
-    ugzip(path=path, outfile=path[:-3], chunksize=10**6)
-    #ugzip(path=AFM_DATA + '.gz', outfile=AFM_DATA, chunksize=10**6)
-    #wget.download(EVE_PUBLIC_DATA, bar=progress_bar, out=EVE_PATH)
+    os.chdir(CPT_PATH)
+    shutil.rmtree('CPT1_score_no_EVE_set_2')
     os.chdir(ROOT_DIR)
-    print('done')
+

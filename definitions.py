@@ -126,7 +126,7 @@ AFM_ROWS = 216175351
 
 #  EVE AND CPT DATA
 
-EVE_PUBLIC_DATA = 'https://evemodel.org/api/proteins/bulk/download/'
+EVE_PUBLIC_DATA = 'https://evemodel.org/api/proteins/bulk/download/?variants=True'
 EVE_SINGLE_PROTEIN = 'https://evemodel.org/api/proteins/web_pid/{}/download/?variants=True'
 #  to avoid downloading the entire eve dataset insert specific entities e.g BRCA1_HUMAN
 EVE_PARTIAL_DOWNLOAD = []
@@ -135,6 +135,8 @@ EVE_EXTENDED_INDEX_PATH = pjoin(EVE_PATH, 'index_unip_full')
 EVE_INVERSE_INDEX = pjoin(EVE_PATH, 'eve_reverse_index.txt')
 EVE_DATA = 'EVE_all_data'
 EVE_DATA_PATH = pjoin(EVE_PATH, EVE_DATA)
+EVE_VARIANTS = 'variant_files'
+EVE_VARIANTS_PATH = pjoin(EVE_DATA_PATH, EVE_VARIANTS)
 EVE_PROT_DOWNLOAD_MSG = "Downloading protein {} from EVE"
 
 CPT_DOWNLOAD_BASE = 'https://zenodo.org/records/7954657/files/'
@@ -147,4 +149,8 @@ CPT_IMPUTE_DATA_1_NAME = 'CPT1_score_no_EVE_set_1'
 CPT_IMPUTE_DATA_2 = f'{CPT_DOWNLOAD_BASE}CPT1_score_no_EVE_set_2.zip?download=1'
 CPT_IMPUTE_DATA_2_HASH = hash_url(CPT_IMPUTE_DATA_2.encode())
 CPT_IMPUTE_DATA_2_NAME = 'CPT1_score_no_EVE_set_2'
+CPT_IMPUTE_DATA_NAME = 'CPT1_score_no_EVE_set'
+CPT_EVE_DATA_PATH = pjoin(CPT_PATH, CPT_EVE_DATA_NAME)
+CPT_EVE_IMPUTE_PATH_1 = pjoin(CPT_PATH, CPT_IMPUTE_DATA_1_NAME)
+CPT_EVE_IMPUTE_PATH_2 = pjoin(CPT_PATH, CPT_IMPUTE_DATA_2_NAME)
 
