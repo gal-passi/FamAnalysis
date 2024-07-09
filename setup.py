@@ -73,6 +73,8 @@ def download_eve(remove_zip=True):
             if os.path.basename(file) != EVE_VARIANTS:
                 shutil.rmtree(file)
     os.chdir(ROOT_DIR)
+    shutil.move('eve_index.txt', EVE_INDEX_PATH_2)
+    shutil.move('eve_reverse_index.txt', EVE_INVERSE_INDEX)
     print('done')
 
 def download_cpt(remove_zip=True):
@@ -106,7 +108,4 @@ if __name__ == '__main__':
     #create_directories()
     #download_data()
     #create_afm_index()
-    os.chdir(CPT_PATH)
-    shutil.rmtree('CPT1_score_no_EVE_set_2')
-    os.chdir(ROOT_DIR)
 

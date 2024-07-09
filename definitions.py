@@ -19,8 +19,6 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 
 ROOT_DIR = dirname(abspath(__file__))
 DB = 'DB'
-DB_CHILDREN = ['AFM', 'CPT', 'EVE', 'Family', 'mutations', 'Patients', 'proteins']
-CHILDREN_INDEX = {child: i for i, child in enumerate(DB_CHILDREN)}
 DB_PATH = pjoin(ROOT_DIR, DB)
 PROTEINS = 'test_p'
 PROTEIN_PATH = pjoin(DB_PATH, PROTEINS)
@@ -31,6 +29,8 @@ EVE_PATH = pjoin(DB_PATH, 'EVE')
 CPT_PATH = pjoin(DB_PATH, 'CPT')
 CPT_INGENE_PATH = pjoin(CPT_PATH, 'transfer_proteome_eve')
 CPT_EXGENE_PATH = pjoin(CPT_PATH, 'transfer_proteome_xgimpute')
+DB_CHILDREN = ['AFM', 'CPT', 'EVE', 'Family', 'mutations', 'Patients', 'proteins', PROTEINS, MUTATIONS]
+CHILDREN_INDEX = {child: i for i, child in enumerate(DB_CHILDREN)}
 
 #  REQUESTS CONSTANTS
 

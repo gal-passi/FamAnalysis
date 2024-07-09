@@ -42,7 +42,7 @@ class ProteinAnalyzer:
         self.proteins = {protein.name: protein for protein in proteins}
         self._cpt_ingene = set([Path(i).with_suffix('').stem for i in glob.glob(f"{pjoin(CPT_INGENE_PATH, '*.csv*')}")])
         self._cpt_exgene = set([Path(i).with_suffix('').stem for i in glob.glob(f"{pjoin(CPT_EXGENE_PATH, '*.csv*')}")])
-        self.eve_records = {os.path.basename(p)[:-10] for p in glob.glob(pjoin(EVE_PATH, '*.csv'))}
+        self.eve_records = {os.path.basename(p)[:-10] for p in glob.glob(pjoin(EVE_VARIANTS_PATH, '*.csv'))}
         #with open(EVE_INDEX_PATH, "rb") as fp:   # Unpickling
         #    self.eve_index_unip = pickle.load(fp)
         #with open(EVE_EXTENDED_INDEX_PATH, "rb") as fp:   # Unpickling
@@ -182,28 +182,34 @@ class ProteinAnalyzer:
         return prot_name in list(map(find_file, glob.glob(pjoin(EVE_DATA_PATH, '*'))))
 
     # TODO change eve db to work with unip - search by name might miss some proteins
-    def score_mutation_evemodel(self, protein, mutation, prot_name=None):
+    def score_mutation_evemodel(self, protein, mutation, prot_name=None, download_records=False):
         """
         looks for an evemodel score for the mutation given
+        :param download_records: bool whether to download new eve records. This should be True is user choose setup
+               with partial eve data.
         :param protein: Protein object
         :param mutation: Mutation object
         :return: (score, prediction) if not found (-1,-1)
         """
         search_name = protein.name if not prot_name else prot_name
+        #  Case 1: Protein reference in is directly found in eve records
         if search_name in self.eve_records:
             res = self._eve_interperter(search_name, mutation)
             if res != (-1, -1):
                 return res
+        # Case 2: Protein has an alias directly found in eve records
         for alias in protein.aliases:
             if alias in self.eve_records:
                 res = self._eve_interperter(alias, mutation)
                 if res != (-1, -1):
                     return res
-        #  check if protein name is an alias of a protein covered by EVE
+        #  Case 3: Protein main reference is an alias of a record directly covered by eve
         if search_name in self.eve_reverse_index:
             for name in set(self.eve_reverse_index[search_name]):
                 #  if successfully downloaded or already exists search for variant
-                if self._unip.download_eve_data(name):
+                search_flag = self._unip.download_eve_data(name) if download_records else \
+                    (search_name in self.eve_records)
+                if search_flag:
                     res = self._eve_interperter(name, mutation)
                     if res != (-1, -1):
                         return res
@@ -218,22 +224,18 @@ class ProteinAnalyzer:
         :param mutation: Mutation obj to find
         :return: tuple (eve_score, -1 if not found, Eve_class 75% ASM prediction)
         """
-        path = EVE_PATH + f"{prot_name}_HUMAN.csv"
+        path = pjoin(EVE_VARIANTS_PATH, f"{prot_name}_HUMAN.csv")
         if not os.path.exists(path):
             return -1, -1
-        data = pd.read_csv(path).fillna(-1)
+        data = pd.read_csv(path, low_memory=False).fillna(-1)
         references = mutation.ref_seqs.values()  # usually will be of size 1
         for reference in references:
             data_seq = ''.join(data["wt_aa"][0::20])
-            #print(data_seq)
             seq_start = data_seq.find(reference)  # TODO handle edges - will be implemented in Mutation
             if seq_start == -1:
                 continue
             aa_location = data_seq.find(mutation.origAA, seq_start, seq_start + 10)
             row_index = (aa_location * 20) + self.AA_TO_INDEX[mutation.changeAA]
-            # For debugging purposes
-            # print(row_index)
-            # print(data.iloc[row_index]["mt_aa"])
             return data.iloc[row_index]["EVE_scores_ASM"], data.iloc[row_index]["EVE_classes_75_pct_retained_ASM"]
         return -1, -1
 

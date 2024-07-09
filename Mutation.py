@@ -298,7 +298,7 @@ class Mutation:
     @property
     def eve_score(self):
         try:
-            return self._protein.muts[self.extended_description]['eveScore']
+            return self._protein.muts[self.extended_description][MODELS_SCORES['EVE']]
         except:
             warn_if(self._v, VERBOSE['thread_warnings'], f"eveScore not initialized for mutation - try to add mutation again")
             warn_if(self._v, VERBOSE['raw_warnings'], f"\n{self._protein.muts}")
@@ -475,10 +475,10 @@ class Mutation:
         :return:
         """
         assert model in AVAILABLE_MODELS, f"model must be one of {' '.join(AVAILABLE_MODELS)}"
-        assert isinstance(score, (float, type(None))), 'score must be either float or None'
+        assert isinstance(score, (float, int, type(None))), 'score must be either float or None'
         prot = self.protein
         prot.muts[self.extended_description][MODELS_SCORES[model]] = score
-        prot._update_DB(os.path.join(prot.directory, prot.MUTS), prot.muts, mode='pickle')
+        prot._update_DB(pjoin(prot.directory, prot.MUTS), prot.muts, mode='pickle')
 
 
     def print_status(self):

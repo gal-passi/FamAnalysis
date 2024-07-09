@@ -125,6 +125,15 @@ def create_parser():
     )
 
     parser.add_argument(
+        "--recalc",
+        type=int,
+        default=0,
+        choices=[0, 1],
+        help="recalculate scores for all mutations including those with existing score \n"
+             "1 - recalc, 0 - calculate only missing scores",
+    )
+
+    parser.add_argument(
         "-v", "--verbose",
         type=int,
         choices=[0, 1, 2, 3],
@@ -238,8 +247,9 @@ def calc_mutations_eve_scores(args, analyzer, recalc=False, iter_desc=''):
     for mutation in tqdm.tqdm(tasks, desc=iter_desc, total=n_muts):
         print_if(args.verbose, VERBOSE['thread_progress'], f"Calculating EVEModel scores for {mutation.long_name}")
         score, prediction = analyzer.score_mutation_evemodel(protein=mutation.protein, mutation=mutation)
-        successful += score != -1
-        mutation.update_score('ESM', score)
+        if score != -1:
+            successful += 1
+            mutation.update_score('EVE', score)
     return successful
 
 
@@ -260,7 +270,7 @@ def main(args):
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating AlphaMissense scores...")
             for chunk in afm_iterator(int(chunksize), usecols=['uniprot_id', 'protein_variant', 'am_pathogenicity']):
                 total_scores += calc_mutations_afm_scores(args, analyzer, chunk, f'iter {iter_num} of {total_iter} ',
-                                                     use_alias=False, recalc=False)
+                                                     use_alias=False, recalc=args.recalc)
                 iter_num += 1
             # Second run with aliases for mutations without scores
             print_if(args.verbose, VERBOSE['program_progress'], f"Expending search for unresolved mutations...")
@@ -272,7 +282,7 @@ def main(args):
             print_if(args.verbose, VERBOSE['program_progress'], f"done, scored {total_scores} of {n_muts} mutations")
         if action == 'score-EVE':
             n_muts = len(glob.glob(pjoin(MUTATION_PATH, '*.txt')))
-            total_scores = calc_mutations_eve_scores(args, analyzer, recalc=False)
+            total_scores = calc_mutations_eve_scores(args, analyzer, recalc=args.recalc)
             print_if(args.verbose, VERBOSE['program_progress'], f"done, scored {total_scores} of {n_muts} mutations")
 
 

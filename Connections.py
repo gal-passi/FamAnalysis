@@ -1,3 +1,5 @@
+import glob
+
 from Bio import Entrez, PDB, SeqIO
 from urllib.error import HTTPError as HTTPError
 import re
@@ -311,7 +313,7 @@ class Uniport:
         :return: bool True is successful
         """
         s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
-        existing_files = {basename(p)[:-4] for p in pjoin(EVE_PATH, '*.csv')}
+        existing_files = {basename(p)[:-4] for p in glob.glob(pjoin(EVE_VARIANTS_PATH, '*.csv'))}
         name = prot_name + '_HUMAN'
         if name in existing_files:
             return True
