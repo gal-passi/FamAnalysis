@@ -27,8 +27,6 @@ MUTATION_PATH = pjoin(DB_PATH, MUTATIONS)
 AFM_PATH = pjoin(DB_PATH, 'AFM')
 EVE_PATH = pjoin(DB_PATH, 'EVE')
 CPT_PATH = pjoin(DB_PATH, 'CPT')
-CPT_INGENE_PATH = pjoin(CPT_PATH, 'transfer_proteome_eve')
-CPT_EXGENE_PATH = pjoin(CPT_PATH, 'transfer_proteome_xgimpute')
 DB_CHILDREN = ['AFM', 'CPT', 'EVE', 'Family', 'mutations', 'Patients', 'proteins', PROTEINS, MUTATIONS]
 CHILDREN_INDEX = {child: i for i, child in enumerate(DB_CHILDREN)}
 
@@ -94,8 +92,10 @@ EVE_SCORE = 'eveScore'
 EVE_PREDICTION = 'evePrediction'
 ESM_SCORE = 'bertScore'
 AFM_SCORE = 'afmScore'
+EVE_TYPE = 'eveMethod'
 AVAILABLE_MODELS = {'EVE', 'ESM', 'AFM'}
-MODELS_SCORES = {'EVE': 'eveScore', 'ESM': 'bertScore', 'AFM': 'afmScore', 'FIRM': 'firmScore'}
+MODELS_SCORES = {'EVE': 'eveScore', 'ESM': 'bertScore', 'AFM': 'afmScore', 'FIRM': 'firmScore',
+                 'EME_METHOD': 'eveMethod'}
 NO_SCORE = -1.0
 
 # ANALYZER CONSTANTS
@@ -106,7 +106,7 @@ NO_SCORE = -1.0
 PROTEIN_ALIASES = {'LOC100287896': 'LIPT2', 'FPGT-TNNI3K': 'TNNI3K', 'ATPSJ2-PTCD1': 'PTCD1', 'CCL4L1': 'CCL4L2',
                    'PTGDR2': 'CCDC86', '4-SEPT': 'SEPT4'}
 NEW_MUTATION_DATA = {'chr': None, 'ref_na': None, 'alt_na': None, 'start': None, 'end': None, AFM_SCORE: NO_SCORE,
-                     EVE_SCORE: NO_SCORE, ESM_SCORE: tuple(), EVE_PREDICTION: NO_SCORE}
+                     EVE_SCORE: NO_SCORE, ESM_SCORE: tuple(), EVE_PREDICTION: NO_SCORE, EVE_TYPE: 'no_score'}
 
 #  ALPHA MISSENSE DATA
 
@@ -138,6 +138,7 @@ EVE_DATA_PATH = pjoin(EVE_PATH, EVE_DATA)
 EVE_VARIANTS = 'variant_files'
 EVE_VARIANTS_PATH = pjoin(EVE_DATA_PATH, EVE_VARIANTS)
 EVE_PROT_DOWNLOAD_MSG = "Downloading protein {} from EVE"
+EVE_TRUNCATE_TAIL = 10
 
 CPT_DOWNLOAD_BASE = 'https://zenodo.org/records/7954657/files/'
 CPT_EVE_DATA = f'{CPT_DOWNLOAD_BASE}CPT1_score_EVE_set.zip?download=1'
@@ -153,4 +154,10 @@ CPT_IMPUTE_DATA_NAME = 'CPT1_score_no_EVE_set'
 CPT_EVE_DATA_PATH = pjoin(CPT_PATH, CPT_EVE_DATA_NAME)
 CPT_EVE_IMPUTE_PATH_1 = pjoin(CPT_PATH, CPT_IMPUTE_DATA_1_NAME)
 CPT_EVE_IMPUTE_PATH_2 = pjoin(CPT_PATH, CPT_IMPUTE_DATA_2_NAME)
+CPT_INGENE_PATH = pjoin(CPT_PATH, CPT_EVE_DATA_NAME)
+CPT_EXGENE_PATH = pjoin(CPT_PATH, CPT_IMPUTE_DATA_NAME)
+CPT_SCORE_COLUMN = "CPT1_score"
+CPT_MUTATION_COLUMN = 'mutant'
+CPT_TRUNCATE_TAIL = 7
+
 

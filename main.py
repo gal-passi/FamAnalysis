@@ -134,6 +134,22 @@ def create_parser():
     )
 
     parser.add_argument(
+        "--use-cpt", "--cpt",
+        type=int,
+        default=1,
+        choices=[0, 1],
+        help="use CPT to impute score when EVEmodel is not available \n"
+             "1 - use cpt, 0 - only original EVEmodel",
+    )
+
+    parser.add_argument(
+        "--cpt_offset",
+        type=int,
+        default=0,
+        help="offset of mutation index in CPT records default is 0",
+    )
+
+    parser.add_argument(
         "-v", "--verbose",
         type=int,
         choices=[0, 1, 2, 3],
@@ -213,7 +229,7 @@ def build_db(args, target, workers):
 def calc_mutations_afm_scores(args, analyzer, chunk=None, iter_desc='', use_alias=False, recalc=False):
     """
     calculates Alpha Missense scores for all the mutations of a specific protein
-    :param recalc: bool re-calculate scored to mutations with scores
+    :param recalc: bool re-calculate scored for mutations with available scores
     :param use_alias: bool should reviewed uid aliases be searched
     :param args:
     :param analyzer: ProteinAnalyzer object
@@ -237,19 +253,42 @@ def calc_mutations_afm_scores(args, analyzer, chunk=None, iter_desc='', use_alia
     return successful
 
 
-def calc_mutations_eve_scores(args, analyzer, recalc=False, iter_desc=''):
+def calc_mutations_eve_scores(args, analyzer, recalc=False, iter_desc='', impute=True):
+    """
+    :param args:
+    :param analyzer: ProteinAnalyzer object
+    :param recalc: bool re-calculate scored for mutations with available scores
+    :param iter_desc:
+    :param impute: bool should CPT be used to calculate scores when EVEmodel scores are not available
+    :return:
+    """
+    # first iteration calculated using original EVEmodel
     successful = 0
     if recalc:
         tasks = list(all_mutations())
     else:
         tasks = [mut for mut in all_mutations() if not mut.has_eve]
-    n_muts = len(tasks)
-    for mutation in tqdm.tqdm(tasks, desc=iter_desc, total=n_muts):
+    total_tasks = len(tasks)
+    for mutation in tqdm.tqdm(tasks, desc=iter_desc, total=len(tasks)):
         print_if(args.verbose, VERBOSE['thread_progress'], f"Calculating EVEModel scores for {mutation.long_name}")
         score, prediction = analyzer.score_mutation_evemodel(protein=mutation.protein, mutation=mutation)
         if score != -1:
             successful += 1
-            mutation.update_score('EVE', score)
+            mutation.update_score('EVE', score, eve_type='EVEmodel')
+
+    # second iteration calculated using original CPT for unresolved variants
+    if impute:
+        if recalc:
+            tasks = [mut for mut in all_mutations() if not mut.eve_type == 'EVEmodel']
+        else:
+            tasks = [mut for mut in all_mutations() if not mut.has_eve]
+        for mutation in tqdm.tqdm(tasks, desc=iter_desc, total=len(tasks)):
+            print_if(args.verbose, VERBOSE['thread_progress'], f"Calculating CPT scores for {mutation.long_name}")
+            score, eve_type = analyzer.score_mutation_eve_impute(mut=mutation, offset=args.cpt_offset, gz=True)
+            if score != -1:
+                successful += 1
+                mutation.update_score('EVE', score, eve_type=eve_type)
+    print_if(args.verbose, VERBOSE['program_progress'], f"done, scored {successful} of {total_tasks} mutations")
     return successful
 
 
@@ -281,9 +320,9 @@ def main(args):
                 iter_num += 1
             print_if(args.verbose, VERBOSE['program_progress'], f"done, scored {total_scores} of {n_muts} mutations")
         if action == 'score-EVE':
-            n_muts = len(glob.glob(pjoin(MUTATION_PATH, '*.txt')))
-            total_scores = calc_mutations_eve_scores(args, analyzer, recalc=args.recalc)
-            print_if(args.verbose, VERBOSE['program_progress'], f"done, scored {total_scores} of {n_muts} mutations")
+            print_if(args.verbose, VERBOSE['program_progress'], f"Calculating EVEmodel scores...")
+            calc_mutations_eve_scores(args, analyzer, recalc=args.recalc, impute=args.use_cpt)
+
 
 
 

@@ -318,7 +318,11 @@ class Mutation:
 
     @property
     def eve_prediction(self):
-        return self._protein.muts[self.extended_description]['evePrediction']
+        return self._protein.muts[self.extended_description][EVE_PREDICTION]
+
+    @property
+    def eve_type(self):
+        return self._protein.muts[self.extended_description][EVE_TYPE]
 
     @property
     def firm_score(self):
@@ -467,7 +471,7 @@ class Mutation:
             for pdb, _ in pdbs:
                 self._unip.download_pdb(pdb, path)
 
-    def update_score(self, model, score):
+    def update_score(self, model, score, eve_type=''):
         """
         updates mutation model scores
         :param model: str one of: EVE | ESM | AFM
@@ -478,6 +482,8 @@ class Mutation:
         assert isinstance(score, (float, int, type(None))), 'score must be either float or None'
         prot = self.protein
         prot.muts[self.extended_description][MODELS_SCORES[model]] = score
+        if model == 'EVE' and eve_type:
+            prot.muts[self.extended_description][MODELS_SCORES['EME_METHOD']] = eve_type
         prot._update_DB(pjoin(prot.directory, prot.MUTS), prot.muts, mode='pickle')
 
 

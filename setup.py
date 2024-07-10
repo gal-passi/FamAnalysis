@@ -85,6 +85,7 @@ def download_cpt(remove_zip=True):
     print('Downloading CPT source data...')
     downloader.download()
     print('Unzipping EVEModel data...')
+    # TODO might be a problem with nesting folders here
     for name in filenames:
         with zipfile.ZipFile(name, "r") as zip_ref:
             zip_ref.extractall(name[:-4])
@@ -105,6 +106,7 @@ def download_all_data():
 
 
 if __name__ == '__main__':
+    pass
     #create_directories()
     #download_data()
     #create_afm_index()

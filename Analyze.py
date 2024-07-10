@@ -1,4 +1,5 @@
 import os
+from os.path import basename
 import subprocess
 from subprocess import check_output
 import numpy as np
@@ -40,9 +41,9 @@ class ProteinAnalyzer:
 
     def __init__(self, *proteins, verbose_level=1):
         self.proteins = {protein.name: protein for protein in proteins}
-        self._cpt_ingene = set([Path(i).with_suffix('').stem for i in glob.glob(f"{pjoin(CPT_INGENE_PATH, '*.csv*')}")])
-        self._cpt_exgene = set([Path(i).with_suffix('').stem for i in glob.glob(f"{pjoin(CPT_EXGENE_PATH, '*.csv*')}")])
-        self.eve_records = {os.path.basename(p)[:-10] for p in glob.glob(pjoin(EVE_VARIANTS_PATH, '*.csv'))}
+        self._cpt_ingene = {basename(p)[:-CPT_TRUNCATE_TAIL] for p in glob.glob(pjoin(CPT_INGENE_PATH, '*.csv.gz'))}
+        self._cpt_exgene = {basename(p)[:-CPT_TRUNCATE_TAIL] for p in glob.glob(pjoin(CPT_EXGENE_PATH, '*.csv.gz'))}
+        self.eve_records = {basename(p)[:-EVE_TRUNCATE_TAIL] for p in glob.glob(pjoin(EVE_VARIANTS_PATH, '*.csv'))}
         #with open(EVE_INDEX_PATH, "rb") as fp:   # Unpickling
         #    self.eve_index_unip = pickle.load(fp)
         #with open(EVE_EXTENDED_INDEX_PATH, "rb") as fp:   # Unpickling
@@ -57,7 +58,7 @@ class ProteinAnalyzer:
             self.eve_index = pickle.load(fp)
         with open(EVE_INVERSE_INDEX, "rb") as fp:
             self.eve_reverse_index = pickle.load(fp)
-        self._unip = Connections.Uniport(verbose_level= verbose_level)
+        self._unip = Connections.Uniport(verbose_level=verbose_level)
         with open(AFM_DIRECTORY_PATH, 'r') as file:
             self.af_index = json.load(file)
         with open(AFM_RANGES_PATH, 'r') as file:
@@ -314,34 +315,32 @@ class ProteinAnalyzer:
             #print("option 3")
             return left_bound-right_excess, seq[left_bound-right_excess:right_bound]
 
-    def score_mutation_eve_impute(self, mut, offset = 0, gz=False):
+    def score_mutation_eve_impute(self, mut, offset = 0, gz=True):
         """
         :param mut: Mutation object
         :return: float CPT imputed score -1 if not found
         """
         name = f"{mut.origAA}{mut.loc - offset}{mut.changeAA}"
         entery_name = mut.protein.entery_name()
-        if entery_name == '': return -1
+        if entery_name == '': return -1, 'not_found'
+        #  case 1 reference name found in CPT records
         if entery_name in self._cpt_ingene:
-            #print("found in ingene")
             score = self._eve_cpt_interperter(name, entery_name, ingene=True, gz=gz)
-            if score != -1: return score
+            if score != -1: return score, 'cpt_ingene'
         if entery_name in self._cpt_exgene:
-            #print("found in ingene")
             score = self._eve_cpt_interperter(name, entery_name, ingene=False, gz=gz)
-            if score != -1: return score
+            if score != -1: return score, 'cpt_exgene'
+        #  case 2 expend search to all known protein references
         for entery_name in mut.protein.entery_name(all=True):
             if entery_name in self._cpt_ingene:
-                #print(f"found {entery_name} in ingene (2)")
                 score = self._eve_cpt_interperter(name, entery_name, ingene=True, gz=gz)
-                if score != -1: return score
+                if score != -1: return score, 'cpt_ingene'
             if entery_name in self._cpt_exgene:
-                #print(f"found {entery_name} in exgene (2)")
                 score = self._eve_cpt_interperter(name, entery_name, ingene=False, gz=gz)
-                if score != -1: return score
-        return -1
+                if score != -1: return score, 'cpt_exgene'
+        return -1, 'not_found'
 
-    def _eve_cpt_interperter(self, desc, entery_name, ingene, gz=False):
+    def _eve_cpt_interperter(self, desc, entery_name, ingene, gz=True):
         """
         :param desc: missmatch description in form {AA}{index}{AA}
         :param entery_name: Uniprot entery name
@@ -353,15 +352,15 @@ class ProteinAnalyzer:
         if ingene:
             path = pjoin(CPT_INGENE_PATH, file)
         else:
-            path = pjoin(CPT_INGENE_PATH, file)
+            path = pjoin(CPT_EXGENE_PATH, file)
         if gz:
             path += ".gz"
             df = pd.read_csv(path, compression='gzip', header=0, sep=',', quotechar='"', on_bad_lines='skip')
         else:
             df = pd.read_csv(path)
 
-        df = df[df['mutant'] == desc][f'{"Transfer_EVE" if ingene else "Transfer_imputed_EVE"}']
-        return -1 if len(df) == 0 else float(df)
+        df = df[df[CPT_MUTATION_COLUMN] == desc][CPT_SCORE_COLUMN]
+        return -1 if len(df) == 0 else float(df.iloc[0])
 
     def score_mutation_afm(self, mutation, chunk=None, uid_index=None, offset=0, use_alias=False):
         """
