@@ -27,7 +27,8 @@ MUTATION_PATH = pjoin(DB_PATH, MUTATIONS)
 AFM_PATH = pjoin(DB_PATH, 'AFM')
 EVE_PATH = pjoin(DB_PATH, 'EVE')
 CPT_PATH = pjoin(DB_PATH, 'CPT')
-DB_CHILDREN = ['AFM', 'CPT', 'EVE', 'Family', 'mutations', 'Patients', 'proteins', PROTEINS, MUTATIONS]
+ESM_PATH = pjoin(DB_PATH, 'ESM')
+DB_CHILDREN = ['AFM', 'CPT', 'EVE', 'ESM' 'Family', 'mutations', 'Patients', 'proteins', PROTEINS, MUTATIONS]
 CHILDREN_INDEX = {child: i for i, child in enumerate(DB_CHILDREN)}
 
 #  REQUESTS CONSTANTS
@@ -49,6 +50,7 @@ UNIPORT_URL = "https://www.uniprot.org/uniprot/"
 UNIPORT_QUERY_URL = "https://rest.uniprot.org/uniprotkb/search?"
 EBI_PDB_URL = "https://www.ebi.ac.uk/pdbe/api/pdb/entry/molecules/"
 PDB_DOWNLOAD_URL = "https://files.rcsb.org/download/"
+ALPHAFOLD_PDB_URL = "https://alphafold.ebi.ac.uk/files/AF-{}-F1-model_v1.pdb"
 ALPHAFOLD_PDB_URL = "https://alphafold.ebi.ac.uk/files/AF-{}-F1-model_v1.pdb"
 
 # QUERIES
@@ -84,6 +86,10 @@ AA_SYN = {"A": "ALA", "C": "CYS", "D": "ASP", "E": "GLU", "F": "PHE", "G": "GLY"
           "K": "LYS", "L": "LEU", "M": "MET", "N": "ASN", "P": "PRO", "Q": "GLN", "R": "ARG", "S": "SER",
           "T": "THR", "V": "VAL", "W": "TRP", "Y": "TYR"}
 AA_SYN_REV = dict((v, k) for k, v in AA_SYN.items())
+AA_TO_INDEX_EVE = {"A": 0, "C": 1, "D": 2, "E": 3, "F": 4, "G": 5, "H": 6, "I": 7, "K": 8, "L": 9, "M": 10,
+                   "N": 11, "P": 12, "Q": 13, "R": 14, "S": 15, "T": 16, "V": 17, "W": 18, "Y": 19}
+AA_TO_INDEX_ESM = {'K': 0, 'R': 1, 'H': 2, 'E': 3, 'D': 4, 'N': 5, 'Q': 6, 'T': 7, 'S': 8, 'C': 9, 'G': 10,
+                   'A': 11, 'V': 12, 'L': 13, 'I': 14, 'M': 15, 'P': 16, 'Y': 17, 'F': 18, 'W': 19}
 
 #  SCORING MODELS
 
@@ -160,4 +166,11 @@ CPT_SCORE_COLUMN = "CPT1_score"
 CPT_MUTATION_COLUMN = 'mutant'
 CPT_TRUNCATE_TAIL = 7
 
+#  ESM-1b
 
+ESM_VARIANTS_DATA = 'https://huggingface.co/spaces/ntranoslab/esm_variants/resolve/main/ALL_hum_isoforms_ESM1b_LLR.zip'
+ESM_DATA = 'ESM_1b_variants'
+ESM_DATA_PATH = pjoin(ESM_PATH, ESM_DATA)
+ESM_INDEX_PATH = pjoin(ESM_PATH, 'index.json')
+ESM_VARIANTS_PATH = pjoin(ESM_DATA_PATH, 'content', 'ALL_hum_isoforms_ESM1b_LLR')
+ESM_FILE_SUFFIX = '_LLR.csv'

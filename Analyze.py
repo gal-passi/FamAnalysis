@@ -19,51 +19,33 @@ from copy import deepcopy
 from definitions import *
 import deprecation
 
-
 ROOT = os.path.join(os.path.dirname(__file__))
 
 
 class ProteinAnalyzer:
-
     INTERFACE = "/cs/staff/dina/utils/srcs/interface/interface"
-    BERT_DB_ROOT = f"{ROOT}/DB/bert"
-    STRINGS_DB_ROOT = f"{ROOT}/DB/strings"
-    STRINGS_INDEX_ROOT = f"{ROOT}/DB/strings/strings_index.txt"
     STRINGS_REVERSE_INDEX_ROOT = f"{ROOT}/DB/strings/strings_rindex.txt"
-    STRING_NEBS = f"{ROOT}/DB/strings/nebs.txt"
-    ESM_MODEL = "/cs/labs/dina/gal_passi/breast_cancer/pdbs-venv/esm"
-    ALPHAFOLD_PREDICTIONS = f"{ROOT}/DB/alphfold_out"
-    ALPHAFOLD_JOBS = f"{ROOT}/temp_alphfold_jobs"
-    MUTATION_PAIRS = f"{ROOT}/"
     PDBS_DB_ROOT = f"{ROOT}/DB/pdbs"
-    AA_TO_INDEX = {"A": 0, "C": 1, "D": 2, "E": 3, "F": 4, "G": 5, "H": 6, "I": 7, "K": 8, "L": 9, "M": 10,
-                   "N": 11, "P": 12, "Q": 13, "R": 14, "S": 15, "T": 16, "V": 17, "W": 18, "Y": 19}
 
     def __init__(self, *proteins, verbose_level=1):
         self.proteins = {protein.name: protein for protein in proteins}
         self._cpt_ingene = {basename(p)[:-CPT_TRUNCATE_TAIL] for p in glob.glob(pjoin(CPT_INGENE_PATH, '*.csv.gz'))}
         self._cpt_exgene = {basename(p)[:-CPT_TRUNCATE_TAIL] for p in glob.glob(pjoin(CPT_EXGENE_PATH, '*.csv.gz'))}
         self.eve_records = {basename(p)[:-EVE_TRUNCATE_TAIL] for p in glob.glob(pjoin(EVE_VARIANTS_PATH, '*.csv'))}
-        #with open(EVE_INDEX_PATH, "rb") as fp:   # Unpickling
-        #    self.eve_index_unip = pickle.load(fp)
-        #with open(EVE_EXTENDED_INDEX_PATH, "rb") as fp:   # Unpickling
-        #    self.eve_index_unip_full = pickle.load(fp)
-        with open(self.STRINGS_INDEX_ROOT, "rb") as fp:
-            self.strings_index = pickle.load(fp)
+        self._unip = Connections.Uniport(verbose_level=verbose_level)
         with open(self.STRINGS_REVERSE_INDEX_ROOT, "rb") as fp:
             self.strings_rindex = pickle.load(fp)
-        with open(self.STRING_NEBS, "rb") as fp:
-            self.protein_nebs = pickle.load(fp)
         with open(EVE_INDEX_PATH_2, "rb") as fp:
             self.eve_index = pickle.load(fp)
         with open(EVE_INVERSE_INDEX, "rb") as fp:
             self.eve_reverse_index = pickle.load(fp)
-        self._unip = Connections.Uniport(verbose_level=verbose_level)
+
         with open(AFM_DIRECTORY_PATH, 'r') as file:
             self.af_index = json.load(file)
         with open(AFM_RANGES_PATH, 'r') as file:
             self.af_ranges = json.load(file)
-
+        with open(ESM_INDEX_PATH, 'r') as file:
+            self.esm_index = json.load(file)
 
     def analyze_all_proteins(self):
         """
@@ -135,9 +117,9 @@ class ProteinAnalyzer:
         :return: int 0-3 where 0 is very far and 3 is very close
         """
         interface_score = np.inf
-        for d in ['2','3','4','6','8','12','16']:
+        for d in ['2', '3', '4', '6', '8', '12', '16']:
             for chain_id, loc in mutation_chains:
-                search_term = b'%d  %b'%(loc, chain_id.encode('utf8'))
+                search_term = b'%d  %b' % (loc, chain_id.encode('utf8'))
                 other_chains = all_chains.difference(chain_id)
                 for c in other_chains:
                     res = check_output([self.INTERFACE, '-c', pdb_path, chain_id, c, d]).find(search_term)
@@ -158,7 +140,7 @@ class ProteinAnalyzer:
         chains = set()
         for ref in mutation.ref_seqs.values():
             offset = ref.find(mutation.origAA)
-            res = {(c_id, seq.find(ref)+offset) for c_id, seq in chains_dict.items() if ref in seq}
+            res = {(c_id, seq.find(ref) + offset) for c_id, seq in chains_dict.items() if ref in seq}
             chains = chains.union(res)
         return chains
 
@@ -170,7 +152,7 @@ class ProteinAnalyzer:
         :return: {chain id: Bio.seq}
         """
         res = {record.id: record.seq for record in SeqIO.parse(pdb_path, 'pdb-seqres')}
-        return {id.split(':')[1] if ':' in id else id : seq for id, seq in res.items()}
+        return {id.split(':')[1] if ':' in id else id: seq for id, seq in res.items()}
 
     @staticmethod
     def search_eve_record(prot_name):
@@ -236,86 +218,11 @@ class ProteinAnalyzer:
             if seq_start == -1:
                 continue
             aa_location = data_seq.find(mutation.origAA, seq_start, seq_start + 10)
-            row_index = (aa_location * 20) + self.AA_TO_INDEX[mutation.changeAA]
+            row_index = (aa_location * 20) + AA_TO_INDEX_EVE[mutation.changeAA]
             return data.iloc[row_index]["EVE_scores_ASM"], data.iloc[row_index]["EVE_classes_75_pct_retained_ASM"]
         return -1, -1
 
-    def Bert_score(self, prot, path=BERT_DB_ROOT, mut_name="", isoform="", seq="", log={"success": [], "fail_iso": [], "no_mut": []}, offset=0):
-        """
-        calculates Bert scors using models esm1v_t33_650M_UR90S  and saves to csv at path
-        this might take up to 15 minutes per mutation
-        :param prot: Protein obj
-        :param mut_name: Optional str to run on one mutation at a time, should be same as in protein.mutations keys
-        :param isoform: Optional specific isoform to run on
-        """
-
-        def _handle_bert(prot_obj, m_name, final_seq, bert_offset, csv_path):
-            path = os.path.join(csv_path, prot_obj.name +'_'+ m_name + ".csv")
-            df = pd.DataFrame({'mutation': [Mutation.Mutation(m_name, prot_obj, prot_obj.mutations[m_name]).for_bert_location]})
-            df.to_csv(path)
-            script_location = os.path.join(self.ESM_MODEL, "variant-prediction/predict.py")
-
-            # NOTE CHANGE script_location IF RUN FROM DIFFERENT LOCATION
-            print("Activating BERT")
-            with subprocess.Popen(f"python3 {script_location} "
-                                  f"--model-location esm1v_t33_650M_UR90S_1 esm1v_t33_650M_UR90S_2 esm1v_t33_650M_UR90S_3 esm1v_t33_650M_UR90S_4 esm1v_t33_650M_UR90S_5 "
-                                  f"--sequence {final_seq} "
-                                  f"--dms-input {path} "
-                                  f"--mutation-col mutation "
-                                  f"--dms-output {path} "
-                                  f"--offset-idx {bert_offset} "
-                                  f"--scoring-strategy wt-marginals", stdout=subprocess.PIPE, shell=True) as proc:
-                print(proc.stdout.read())
-                print(f"done {prot_obj.name}({m_name}) - len = {len(final_seq)}, off = {bert_offset}")
-                log['success'].append(prot.name + "_" + m_name)
-                return log
-
-        if not prot.mutations:
-            print(f"done {prot.name} no mutations found to process")
-            log['no_mut'].append(prot.name)
-            return log
-        if not seq:
-            for name, data in prot.mutations.items():
-                mut = Mutation.Mutation(name, prot, data)
-                if len(mut.isoforms) == 0:
-                    warnings.warn(f"No valid isoforms for {prot.name}({mut.name})")
-                    log['fail_iso'].append(prot.name)
-                    continue
-                iso = next(iter(mut.isoforms)) if not isoform else isoform
-                if (len(mut.isoforms) > 1) and (not isoform):
-                    warnings.warn(f"More then 1 isoform found using {iso} use isoform parameter to choose a different one from {mut.isoforms}")
-                sequence = prot.isoforms[iso]
-
-                if len(sequence) > 1020:
-                    offset, sequence = self._bert_process_long_sequences(sequence, mut)
-
-                log = _handle_bert(prot, name, sequence, offset, path)
-
-        if seq and mut_name:
-            sequence = seq
-            return _handle_bert(prot, mut_name, sequence, offset, path)
-
-    @staticmethod
-    def _bert_process_long_sequences(seq, mut):
-        """
-        trims seq to len < 1024 using mut Object. to fit for bert model
-        """
-        loc = mut.loc
-        left_bound = 0 if loc-510 < 0 else loc - 510
-        right_bound = len(seq) if loc + 510 >len(seq) else loc+510
-        left_excess = 0 if loc - 510 > 0 else abs(loc-510)
-        right_excess = 0 if loc + 510 <= len(seq) else loc+510-len(seq)
-        if (left_excess == 0) and (right_excess == 0):
-            #print("option 1")
-            return left_bound, seq[left_bound:right_bound]
-        if left_excess > 0:
-            #print("option 2")
-            return 0, seq[left_bound:right_bound+left_excess]
-        if right_excess > 0:
-            #print("option 3")
-            return left_bound-right_excess, seq[left_bound-right_excess:right_bound]
-
-    def score_mutation_eve_impute(self, mut, offset = 0, gz=True):
+    def score_mutation_eve_impute(self, mut, offset=0, gz=True):
         """
         :param mut: Mutation object
         :return: float CPT imputed score -1 if not found
@@ -347,7 +254,7 @@ class ProteinAnalyzer:
         :param ingene: bool search ingene or exgene records
         :return: float score -1 if not found
         """
-        #print(f"called with {entery_name} and ingene={ingene}")
+        # print(f"called with {entery_name} and ingene={ingene}")
         file = f"{entery_name}.csv"
         if ingene:
             path = pjoin(CPT_INGENE_PATH, file)
@@ -392,6 +299,39 @@ class ProteinAnalyzer:
         # score not found
         return None
 
+    def score_mutation_esm(self, mut, offset=0):
+        """
+        :param mut: Mutation object
+        :return: float ESM-1b score, None if not found
+        """
+        entery_name = mut.protein.entery_name()
+        if entery_name == '':
+            return None
+        #  case 1 reference name found in ESM records
+        if entery_name in self.esm_index:
+            search_name = self.esm_index[entery_name]
+            score = self._esm_interperter(mut, search_name, offset)
+            if score is not None:
+                return score
+        #  case 2 expend search to all known protein references
+        for entery_name in mut.protein.entery_name(all=True):
+            if entery_name in self.esm_index:
+                search_name = self.esm_index[entery_name]
+                score = self._esm_interperter(mut, search_name, offset)
+                if score is not None:
+                    return score
+        return None
+
+    @staticmethod
+    def _esm_interperter(mut, search_name, offset):
+        file_path = pjoin(ESM_VARIANTS_PATH, search_name + ESM_FILE_SUFFIX)
+        row = AA_TO_INDEX_ESM[mut.changeAA]
+        column = f"{mut.origAA} {mut.loc - offset}"
+        data = pd.read_csv(file_path)
+        if column in data.columns:
+            return float(data[column][row])
+        else:
+            return None
 
     @staticmethod
     def _afm_score_from_uid(variant, idx_from, idx_to, chunk=None):
@@ -407,7 +347,6 @@ class ProteinAnalyzer:
         data = afm_range_read(idx_from, idx_to) if chunk is None else chunk
         score = data[data['protein_variant'] == variant]['am_pathogenicity']
         return float(score.iloc[0]) if not score.empty else None
-
 
     @staticmethod
     def mutations_by_rank():
@@ -444,80 +383,13 @@ class ProteinAnalyzer:
             rank_2 = rank_2 - (rank_3 | rank_4)
             rank_3 = rank_3 - rank_4
             r1 = r1 | rank_1
-            r2 = r2 |rank_2
+            r2 = r2 | rank_2
             r3 = r3 | rank_3
             r4 = r4 | rank_4
-            c+=1
+            c += 1
             print(f"finished {round(c / n, 2) * 100}%")
         print("done")
         r1 = r1 - (r2 | r3 | r4)
         r2 = r2 - (r3 | r4)
         r3 = r3 - r4
         return r1, r2, r3, r4
-
-    def find_mutation_pairs(self, patient):  #TODO not yet implemented
-        """
-        pairs of interacting proteins which are both damaged in the same patient
-        :param patient: Patient object
-        :return: {(prot1, prot2)}
-        """
-        raise NotImplementedError
-        # search strings for protein interaction check if any interacting protein is in patient make sure to delete duplicates. might be sensible to writ Pairs class taking two mutation as input
-
-    def model_pairs_alphafold(self, mutation_a, mutation_b, job_name='', ipath="DB/alphafold_jobs", opath='', padding=100):
-        """
-        sends two mutations to be modeled in alphafold
-        :param mutation_a: Mutation object
-        :param mutation_b: Mutation object
-        :param name: optional output name
-        :param ipath: optional path for fasta files to be sent as jobs
-        :param padding: padding on both sides of mutation of modeling sequence
-        :param opath: optional output path
-        """
-        mutation_a.set_ref_seqs_len(padding)
-        mutation_b.set_ref_seqs_len(padding)
-        seq_1, seq_2 = next(iter((mutation_a.ref_seqs.values()))), next(iter((mutation_b.ref_seqs.values())))
-        if (not seq_1) or (not seq_2):
-            name = mutation_a.long_name if not seq_1 else mutation_b.long_name
-            warnings.warn(f"could not find reference sequence for {name}. Will not predict structure")
-            return -1
-        name = job_name if job_name else f"{mutation_a.long_name}_{mutation_b.long_name}_{padding}"
-        fasta_content = f"{seq_1}:{seq_2}"
-        assert len(fasta_content) <= (padding*4)+2, f"{len(fasta_content)} - sequence len appears to be wrong"
-        make_fasta(ipath, name, f"{seq_1}:{seq_2}")
-        #TODO might want to add option to run the job
-
-    def interactions(self, protein):
-        """
-        returns list on know interactions
-        :param protein: Protein object
-        :return: [protein_name]
-        """
-
-        return self.protein_nebs[protein.name] if protein.name in self.protein_nebs else []
-
-    '''
-    class ProteinScores:
-        """
-        This class gives a simple API to get all scores related to protein function
-        """
-        def __init__(self):
-            self.distance = 0.0
-
-        @property
-        def d(self):
-            """
-            :return: distance of mutation from catalytic site
-            given as mean over all pdbs featuring the mutation
-            """
-            return self.distance
-
-        @d.setter
-        def d(self, value):
-            """
-            setter for distance score
-            :param value: float
-            :return: None
-            """
-            self.distance = value
-    '''

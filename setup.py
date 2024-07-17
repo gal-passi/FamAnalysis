@@ -1,5 +1,5 @@
 import glob
-
+import pandas as pd
 from utils import progress_bar, afm_iterator, adaptive_chunksize, ugzip
 from utils import SafeDownloader
 from definitions import *
@@ -36,6 +36,12 @@ def create_afm_index():
     with open(AFM_RANGES_PATH, "w") as file:
         file.write(json.dumps(ranges))
     print('done')
+
+def create_esm_index():
+    df = pd.read_csv(pjoin(ESM_DATA_PATH, 'contents_u_df.csv'))
+    index = {row['gene']: row['id'] for _, row in df.iterrows()}
+    with open(ESM_INDEX_PATH, "w") as file:
+        file.write(json.dumps(index))
 
 def download_afm():
     os.chdir(AFM_PATH)
@@ -99,10 +105,25 @@ def download_cpt(remove_zip=True):
     os.chdir(ROOT_DIR)
     print('done')
 
+def download_esm(remove_zip=True):
+    os.chdir(ESM_PATH)
+    downloader = SafeDownloader([ESM_VARIANTS_DATA], [ESM_DATA + '.zip'])
+    print('Downloading ESM-1b variants source data...')
+    downloader.download()
+    print('Unzipping ESM-1b data...')
+    with zipfile.ZipFile(ESM_DATA + '.zip', "r") as zip_ref:
+        zip_ref.extractall(ESM_DATA)
+    if remove_zip:
+        os.remove(ESM_DATA + '.zip')
+    create_esm_index()
+    os.chdir(ROOT_DIR)
+    print('done')
+
 def download_all_data():
     download_afm()
     download_eve()
     download_cpt()
+    download_esm()
 
 
 if __name__ == '__main__':
