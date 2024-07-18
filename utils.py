@@ -14,7 +14,6 @@ import hashlib
 from tqdm import tqdm
 import click
 
-
 ALPHAFOLD_PDB_URL = "https://alphafold.ebi.ac.uk/files/AF-{}-F1-model_v1.pdb"
 
 
@@ -166,35 +165,14 @@ def ugzip(path, outfile, chunksize):
                 chunk = f_in.read(chunksize)
 
 
-def generate_proteins(proteins):
-    """
-    yields Protein from list of protein names =
-    """
-    for p_name in proteins:
-        yield Protein.Protein(ref_name=p_name)
+def name_for_esm(name):
+    if '_HUMAN' in name:
+        return name[:-6]
+    return name
 
 
-def generate_pairs(pairs):
-    """
-    yields Mutations from list of tuples ((protein_name, mutation_name),(protein_name, mutation_name))
-    """
-    for m1, m2 in pairs:
-        m1 = Mutation.Mutation(m1[1], m1[0])
-        m2 = Mutation.Mutation(m2[1], m2[0])
-        yield Pair.Pair(m1, m2)
-
-
-def generate_mutations(mutations):
-    """
-    yields Mutations from list of tuples [(mutation_name, protein_name)]
-    """
-    for m_name, p_name in mutations:
-        yield Mutation.Mutation(m_name, p_name)
-
-
-def create_mutation(s):
-    s = s.split("_")
-    return Mutation.Mutation(f"p.{s[1]}", s[0])
+def sequence_from_esm_df(esm_data):
+    return ''.join([desc[0] for desc in esm_data.columns.to_list()[1:]])
 
 
 def update_patients_ranks():
@@ -457,6 +435,7 @@ class SafeDownloader:
         """Validate downloads with hashes in ``HASHES``."""
         for position in range(len(self.urls)):
             self.validate_file(position)
+
 
 '''
 def _firm_setup(ref_gen='GRCh37', n_threads=4):

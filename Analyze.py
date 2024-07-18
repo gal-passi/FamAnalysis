@@ -10,7 +10,7 @@ import glob
 import pandas as pd
 import Mutation
 import pickle
-from utils import adaptive_chunksize, make_fasta, afm_range_read
+from utils import adaptive_chunksize, make_fasta, afm_range_read, name_for_esm,sequence_from_esm_df
 import Connections
 from pathlib import Path
 import Patient
@@ -304,34 +304,56 @@ class ProteinAnalyzer:
         :param mut: Mutation object
         :return: float ESM-1b score, None if not found
         """
-        entery_name = mut.protein.entery_name()
-        if entery_name == '':
-            return None
+        entry_name = name_for_esm(mut.protein.entery_name())
+        if entry_name == '':
+            return None, 'failed'
         #  case 1 reference name found in ESM records
-        if entery_name in self.esm_index:
-            search_name = self.esm_index[entery_name]
-            score = self._esm_interperter(mut, search_name, offset)
+        if entry_name in self.esm_index:
+            search_name = self.esm_index[entry_name]
+            score, score_type = self._esm_interperter(mut, search_name, offset)
             if score is not None:
-                return score
+                return score, score_type
         #  case 2 expend search to all known protein references
-        for entery_name in mut.protein.entery_name(all=True):
-            if entery_name in self.esm_index:
-                search_name = self.esm_index[entery_name]
-                score = self._esm_interperter(mut, search_name, offset)
+        #  case 3 unable to find - use reference sequence in isoforms
+        temp_score = None
+        for entry_name in mut.protein.entery_name(all=True):
+            entry_name = name_for_esm(entry_name)
+            if entry_name in self.esm_index:
+                search_name = self.esm_index[entry_name]
+                score, score_type = self._esm_interperter(mut, search_name, offset, use_ref_seq=True)
                 if score is not None:
-                    return score
-        return None
+                    if score_type == 'direct':
+                        return score, score_type
+                    else:
+                        #  may override previous case of multiple temp_scores is rare and not trivial to handle
+                        # always prefers direct scores
+                        temp_score = score
+        if temp_score:
+            return temp_score, score_type
+        return None, 'failed'
 
     @staticmethod
-    def _esm_interperter(mut, search_name, offset):
+    def _esm_interperter(mut, search_name, offset, use_ref_seq=False):
         file_path = pjoin(ESM_VARIANTS_PATH, search_name + ESM_FILE_SUFFIX)
-        row = AA_TO_INDEX_ESM[mut.changeAA]
         column = f"{mut.origAA} {mut.loc - offset}"
         data = pd.read_csv(file_path)
+        row = data[data.iloc[:, 0] == mut.changeAA].index.tolist()[0]
         if column in data.columns:
-            return float(data[column][row])
-        else:
-            return None
+            return float(data[column][row]), 'direct'
+        if use_ref_seq:
+            esm_seq = sequence_from_esm_df(data)
+            references = mut.ref_seqs.values()
+            for ref in references:
+                seq_start = esm_seq.find(ref)
+                if seq_start == -1:
+                    continue
+                # since seq ignores first column add 1
+                aa_location = esm_seq.find(mut.origAA, seq_start, seq_start + 10) + 1
+                column = data.iloc[:, aa_location]
+                print(mut.long_name)
+                print(data.columns.tolist()[aa_location])
+                return float(column[row]), 'indirect'
+        return None, None
 
     @staticmethod
     def _afm_score_from_uid(variant, idx_from, idx_to, chunk=None):

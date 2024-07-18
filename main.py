@@ -331,6 +331,17 @@ if __name__ == "__main__":
     parser = create_parser()
     args = parser.parse_args()
     start_time = time.time()
-    main(args)
+    #main(args)
+    c = 0
+    m = 0
+    analyzer = Analyze.ProteinAnalyzer()
+    for mut in all_mutations():
+        score, score_type = analyzer.score_mutation_esm(mut)
+        c += 1
+        if score is None:
+            continue
+        else:
+            m+=1
+    print(f'{m} / {c}')
     print("--- %s seconds ---" % (time.time() - start_time))
 
