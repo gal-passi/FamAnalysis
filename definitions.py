@@ -97,12 +97,14 @@ FIRM_SCORE = 'firmScore'  # deprecated
 EVE_SCORE = 'eveScore'
 EVE_PREDICTION = 'evePrediction'
 ESM_SCORE = 'bertScore'
+ESM_TYPE = 'esmMethod'
 AFM_SCORE = 'afmScore'
 EVE_TYPE = 'eveMethod'
 AVAILABLE_MODELS = {'EVE', 'ESM', 'AFM'}
 MODELS_SCORES = {'EVE': 'eveScore', 'ESM': 'bertScore', 'AFM': 'afmScore', 'FIRM': 'firmScore',
-                 'EME_METHOD': 'eveMethod'}
+                 'EVE_METHOD': 'eveMethod', 'ESM_METHOD': 'esmMethod'}
 NO_SCORE = -1.0
+NO_TYPE = 'no_score'
 
 # ANALYZER CONSTANTS
 
@@ -111,8 +113,10 @@ NO_SCORE = -1.0
 
 PROTEIN_ALIASES = {'LOC100287896': 'LIPT2', 'FPGT-TNNI3K': 'TNNI3K', 'ATPSJ2-PTCD1': 'PTCD1', 'CCL4L1': 'CCL4L2',
                    'PTGDR2': 'CCDC86', '4-SEPT': 'SEPT4'}
+
 NEW_MUTATION_DATA = {'chr': None, 'ref_na': None, 'alt_na': None, 'start': None, 'end': None, AFM_SCORE: NO_SCORE,
-                     EVE_SCORE: NO_SCORE, ESM_SCORE: tuple(), EVE_PREDICTION: NO_SCORE, EVE_TYPE: 'no_score'}
+                     EVE_SCORE: NO_SCORE, ESM_SCORE: None, ESM_TYPE: NO_TYPE, EVE_PREDICTION: NO_SCORE,
+                     EVE_TYPE: NO_TYPE}
 
 #  ALPHA MISSENSE DATA
 

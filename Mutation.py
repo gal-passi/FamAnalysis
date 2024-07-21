@@ -1,11 +1,14 @@
 import re
 import os
 import pickle
+import warnings
+
 import numpy as np
 import Analyze
 import Protein as P
 from definitions import *
 from utils import print_if, warn_if
+
 
 
 class Mutation:
@@ -284,22 +287,27 @@ class Mutation:
         return self.origAA + str(self.loc-offset) + self.changeAA
 
     @property
-    def bert_score(self):
+    def esm_score(self):
         """
-        to control bert score return option run bert_scores method.
-        :return: minimal bert score
+        :return: esm-2v score
         """
-        return self.bert_scores(how='min')
+        try:
+            return self._protein.muts[self.extended_description][MODELS_SCORES['ESM']]
+        except KeyError:
+            warn_if(self._v, VERBOSE['thread_warnings'], f"eveScore not initialized for mutation - try to add mutation again")
+            warn_if(self._v, VERBOSE['raw_warnings'], f"\n{self._protein.muts}")
+            return None
+
 
     @property
-    def has_bert(self):
-        return self.bert_score != 0
+    def has_esm(self):
+        return self.esm_score is not None
 
     @property
     def eve_score(self):
         try:
             return self._protein.muts[self.extended_description][MODELS_SCORES['EVE']]
-        except:
+        except KeyError:
             warn_if(self._v, VERBOSE['thread_warnings'], f"eveScore not initialized for mutation - try to add mutation again")
             warn_if(self._v, VERBOSE['raw_warnings'], f"\n{self._protein.muts}")
             return -1
@@ -349,27 +357,8 @@ class Mutation:
 
     @property
     def n_scores(self):
-        return float(self.has_firm + self.has_eve + self.has_bert)
+        return float(self.has_firm + self.has_eve + self.has_esm)
 
-    def bert_scores(self, how='all'):
-        """
-        return bert scores for mutation
-        :param how: one of ['all', 'sum', 'avg', 'min', 'max']
-        :return:
-        """
-        scores = self._protein.muts[self.extended_description]['bertScore']
-        if not scores or type(scores) != tuple:
-            return 0
-        if how == 'all':
-            return scores
-        if how == 'sum':
-            return sum(scores)
-        if how == 'avg':
-            return sum(scores)/float(len(scores))
-        if how == 'min':
-            return min(scores)
-        if how == 'max':
-            return max(scores)
 
     @staticmethod
     def extract_name(description):
@@ -471,26 +460,51 @@ class Mutation:
             for pdb, _ in pdbs:
                 self._unip.download_pdb(pdb, path)
 
-    def update_score(self, model, score, eve_type=''):
+    def update_score(self, model, score, eve_type='', esm_type=''):
         """
         updates mutation model scores
         :param model: str one of: EVE | ESM | AFM
-        :param score:
+        :param score: float score to update
+        :param esm_type: specification of model used for eveModel score
+        :param eve_type: specification of inference used in esm
         :return:
         """
         assert model in AVAILABLE_MODELS, f"model must be one of {' '.join(AVAILABLE_MODELS)}"
         assert isinstance(score, (float, int, type(None))), 'score must be either float or None'
-        prot = self.protein
+        prot = self.protein.reload()
         prot.muts[self.extended_description][MODELS_SCORES[model]] = score
         if model == 'EVE' and eve_type:
-            prot.muts[self.extended_description][MODELS_SCORES['EME_METHOD']] = eve_type
+            prot.muts[self.extended_description][MODELS_SCORES['EVE_METHOD']] = eve_type
+        if model == 'ESM' and esm_type:
+            prot.muts[self.extended_description][MODELS_SCORES['ESM_METHOD']] = esm_type
         prot._update_DB(pjoin(prot.directory, prot.MUTS), prot.muts, mode='pickle')
 
+    def esm_scores_from_inference(self, how='all'):
+        """
+        This method was deprecated - used for direct inference from esm
+        :param how: one of ['all', 'sum', 'avg', 'min', 'max']
+        :return:
+        """
+        warnings.warn('This method is no longer supported use esm_score instead')
+        return None
+        scores = self._protein.muts[self.extended_description]['bertScore']
+        if not scores or type(scores) != tuple:
+            return 0
+        if how == 'all':
+            return scores
+        if how == 'sum':
+            return sum(scores)
+        if how == 'avg':
+            return sum(scores)/float(len(scores))
+        if how == 'min':
+            return min(scores)
+        if how == 'max':
+            return max(scores)
 
     def print_status(self):
         print(f"protein name:           {self.protein_name}")
         print(f"mutation symbol:        {self.name}")
-        print(f"bert score (min):       {round(self.bert_score, 3)}")
+        print(f"esm score (min):       {round(self.esm_score, 3)}")
         try:
             print(f"firm score:             {round(self.firm_score, 3)}")
         except TypeError:

@@ -350,8 +350,6 @@ class ProteinAnalyzer:
                 # since seq ignores first column add 1
                 aa_location = esm_seq.find(mut.origAA, seq_start, seq_start + 10) + 1
                 column = data.iloc[:, aa_location]
-                print(mut.long_name)
-                print(data.columns.tolist()[aa_location])
                 return float(column[row]), 'indirect'
         return None, None
 

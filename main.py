@@ -14,7 +14,8 @@ import glob
 import time
 from math import ceil
 
-
+test_eve = set()
+test_cpt = set()
 
 def all_proteins():
     """
@@ -226,7 +227,21 @@ def build_db(args, target, workers):
     return skipped
 
 
-def calc_mutations_afm_scores(args, analyzer, chunk=None, iter_desc='', use_alias=False, recalc=False):
+def erase_mutations_scores(model):
+    """
+    reset model scores to default
+    :param model: EVE | ESM | AFM
+    :return:
+    """
+    assert model in AVAILABLE_MODELS, 'model should be one of EVE | ESM | AFM'
+    score = None if model == 'ESM' else NO_SCORE
+    score_type = NO_TYPE
+    for mutation in all_mutations():
+        mutation.update_score(model, score, eve_type=score_type, esm_type=score_type)
+    print_if(args.verbose, VERBOSE['program_progress'], f"{model} scores set to default")
+
+
+def calc_mutations_afm_scores(args, analyzer, chunk=None, iter_desc='', use_alias=False):
     """
     calculates Alpha Missense scores for all the mutations of a specific protein
     :param recalc: bool re-calculate scored for mutations with available scores
@@ -238,10 +253,7 @@ def calc_mutations_afm_scores(args, analyzer, chunk=None, iter_desc='', use_alia
     :return:
     """
     successful = 0
-    if recalc:
-        tasks = list(all_mutations())
-    else:
-        tasks = [mut for mut in all_mutations() if not mut.has_afm]
+    tasks = [mut for mut in all_mutations() if not mut.has_afm]
     n_muts = len(tasks)
     if chunk is not None:
         uid_index = set(chunk['uniprot_id'].unique())
@@ -292,6 +304,30 @@ def calc_mutations_eve_scores(args, analyzer, recalc=False, iter_desc='', impute
     return successful
 
 
+def calc_mutations_esm_scores(args, analyzer, recalc=False, iter_desc=''):
+    """
+    :param args:
+    :param analyzer: ProteinAnalyzer object
+    :param recalc: bool re-calculate scored for mutations with available scores
+    :param iter_desc:
+    :return:
+    """
+    successful = 0
+    if recalc:
+        tasks = list(all_mutations())
+    else:
+        tasks = [mut for mut in all_mutations() if not mut.has_esm]
+    total_tasks = len(tasks)
+    for mutation in tqdm.tqdm(tasks, desc=iter_desc, total=len(tasks)):
+        print_if(args.verbose, VERBOSE['thread_progress'], f"Calculating ESM1b scores for {mutation.long_name}")
+        score, score_type = analyzer.score_mutation_esm(mut=mutation)
+        if score is not None:
+            successful += 1
+            mutation.update_score('ESM', score, esm_type=score_type)
+    print_if(args.verbose, VERBOSE['program_progress'], f"done, scored {successful} of {total_tasks} mutations")
+    return successful
+
+
 def main(args):
     workers = args.workers if args.workers else cpu_count()
     print_if(args.verbose, VERBOSE['program_progress'], f"running on {workers} CPUs")
@@ -306,24 +342,28 @@ def main(args):
             chunksize = adaptive_chunksize(AFM_ROWSIZE, LOW_MEM_RAM_USAGE)
             n_muts, iter_num, total_iter, total_scores =len(glob.glob(pjoin(MUTATION_PATH, '*.txt'))), 1, \
                                                         ceil(AFM_ROWS / chunksize), 0
+            if args.recalc:
+                erase_mutations_scores('AFM')
+
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating AlphaMissense scores...")
             for chunk in afm_iterator(int(chunksize), usecols=['uniprot_id', 'protein_variant', 'am_pathogenicity']):
                 total_scores += calc_mutations_afm_scores(args, analyzer, chunk, f'iter {iter_num} of {total_iter} ',
-                                                     use_alias=False, recalc=args.recalc)
+                                                     use_alias=False)
                 iter_num += 1
             # Second run with aliases for mutations without scores
             print_if(args.verbose, VERBOSE['program_progress'], f"Expending search for unresolved mutations...")
             iter_num = 1
             for chunk in afm_iterator(int(chunksize), usecols=['uniprot_id', 'protein_variant', 'am_pathogenicity']):
                 total_scores += calc_mutations_afm_scores(args, analyzer, chunk, f'iter {iter_num} of {total_iter}',
-                                                     use_alias=True, recalc=False)
+                                                     use_alias=True)
                 iter_num += 1
             print_if(args.verbose, VERBOSE['program_progress'], f"done, scored {total_scores} of {n_muts} mutations")
         if action == 'score-EVE':
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating EVEmodel scores...")
             calc_mutations_eve_scores(args, analyzer, recalc=args.recalc, impute=args.use_cpt)
-
-
+        if action == 'score-ESM':
+            print_if(args.verbose, VERBOSE['program_progress'], f"Calculating ESM2b scores...")
+            calc_mutations_esm_scores(args, analyzer, recalc=args.recalc)
 
 
 
@@ -331,17 +371,31 @@ if __name__ == "__main__":
     parser = create_parser()
     args = parser.parse_args()
     start_time = time.time()
-    #main(args)
+    main(args)
     c = 0
-    m = 0
-    analyzer = Analyze.ProteinAnalyzer()
-    for mut in all_mutations():
-        score, score_type = analyzer.score_mutation_esm(mut)
-        c += 1
-        if score is None:
-            continue
-        else:
-            m+=1
-    print(f'{m} / {c}')
+    for m in all_mutations():
+        if m.has_afm:
+            c+=1
+    print(f'afm count {c}')
     print("--- %s seconds ---" % (time.time() - start_time))
 
+'''
+    for m in all_mutations():
+        prot = m.protein
+        prot.muts[m.extended_description][MODELS_SCORES['ESM']] = None
+        prot._update_DB(pjoin(prot.directory, prot.MUTS), prot.muts, mode='pickle')
+
+'''
+
+'''
+if mutation.long_name in ['ANKAR_H539L', 'CALCOCO1_K425N', 'FRG2C_D9N', 'FRG2C_A259T', 'GALNT5_G387E',
+                          'HLA-DRB1_F69Y', 'MAGEC1_S309C', 'MUC16_Q13566R', 'MUC3A_G8S', 'OR1E1_L130M',
+                          'OR4A16_I43T', 'PABPC3_A181T', 'PABPC3_P191T', 'PABPC3_I195V',
+                          'SH3TC1_R878W']:
+    print()
+    print(mutation.long_name)
+    print(score)
+    print(eve_type)
+    print(mutation.protein.muts)
+    print('*' * 30)
+'''

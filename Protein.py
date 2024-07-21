@@ -8,6 +8,7 @@ import Analyze
 from Connections import Uniport
 from definitions import *
 from utils import print_if, warn_if
+from copy import deepcopy
 
 
 PATH = r"sequence.txt"
@@ -77,6 +78,13 @@ class Protein:
             raise NotImplementedError
         return self.name == other.name
 
+    def reload(self):
+        """
+        reload object from memory
+        :return:
+        """
+        self._Uids, self.isoforms, self.pdbs, self.muts = self.load_protein()
+        return self
 
     @property
     def name(self):
@@ -291,7 +299,7 @@ class Protein:
             warn_if(self._v, VERBOSE['thread_warnings'], f"Unable to find mutation in reference:\n{description}")
             return
 
-        data = NEW_MUTATION_DATA
+        data = deepcopy(NEW_MUTATION_DATA)
         if dna_data:
             try:
                 data['chr'] = dna_data['chr']
@@ -301,7 +309,7 @@ class Protein:
                 data['end'] = dna_data['end']
             except KeyError:
                 warn_if(self._v, VERBOSE['thread_warnings'], f"DNA data supplied for {description} in wrong format skipping:\n{dna_data}")
-                data = NEW_MUTATION_DATA
+                data = deepcopy(NEW_MUTATION_DATA)
 
         self.muts[name] = data
         self._update_DB(os.path.join(self.directory, self.MUTS), self.muts, mode='pickle')
