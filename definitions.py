@@ -100,14 +100,13 @@ ESM_SCORE = 'bertScore'
 ESM_TYPE = 'esmMethod'
 AFM_SCORE = 'afmScore'
 EVE_TYPE = 'eveMethod'
+DS_RANK = 'DSRank'
 AVAILABLE_MODELS = {'EVE', 'ESM', 'AFM'}
-MODELS_SCORES = {'EVE': 'eveScore', 'ESM': 'bertScore', 'AFM': 'afmScore', 'FIRM': 'firmScore',
-                 'EVE_METHOD': 'eveMethod', 'ESM_METHOD': 'esmMethod'}
+AVAILABLE_SCORES = AVAILABLE_MODELS | {'DS'}
+MODELS_SCORES = {'EVE': EVE_SCORE, 'ESM': ESM_SCORE, 'AFM': AFM_SCORE, 'FIRM': FIRM_SCORE,
+                 'EVE_METHOD': EVE_TYPE, 'ESM_METHOD': ESM_TYPE, 'DS': DS_RANK}
 NO_SCORE = -1.0
 NO_TYPE = 'no_score'
-
-# ANALYZER CONSTANTS
-
 
 #  PROTEINS CONSTANTS
 
@@ -116,7 +115,7 @@ PROTEIN_ALIASES = {'LOC100287896': 'LIPT2', 'FPGT-TNNI3K': 'TNNI3K', 'ATPSJ2-PTC
 
 NEW_MUTATION_DATA = {'chr': None, 'ref_na': None, 'alt_na': None, 'start': None, 'end': None, AFM_SCORE: NO_SCORE,
                      EVE_SCORE: NO_SCORE, ESM_SCORE: None, ESM_TYPE: NO_TYPE, EVE_PREDICTION: NO_SCORE,
-                     EVE_TYPE: NO_TYPE}
+                     EVE_TYPE: NO_TYPE, DS_RANK: None}
 
 #  ALPHA MISSENSE DATA
 
@@ -178,3 +177,7 @@ ESM_DATA_PATH = pjoin(ESM_PATH, ESM_DATA)
 ESM_INDEX_PATH = pjoin(ESM_PATH, 'index.json')
 ESM_VARIANTS_PATH = pjoin(ESM_DATA_PATH, 'content', 'ALL_hum_isoforms_ESM1b_LLR')
 ESM_FILE_SUFFIX = '_LLR.csv'
+
+#  DSRANK AND SUMMARY
+EVE_COL, EVE_TYPE_COL, ESM_COL, ESM_TYPE_COL, AFM_COL, DS_COL = "eve", "eve_type", "esm", "esm_type", "afm", "ds_rank"
+PROT_COL, MUT_COL = 'protein', 'variant'

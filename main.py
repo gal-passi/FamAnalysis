@@ -1,5 +1,5 @@
 import Analyze
-import Mutation
+from Mutation import Mutation
 from Protein import Protein
 import pandas as pd
 import os
@@ -8,14 +8,12 @@ from multiprocessing import cpu_count
 from multiprocessing.pool import ThreadPool as Pool
 import tqdm
 from functools import partial
-from utils import print_if, adaptive_chunksize, afm_iterator, warn_if
+from utils import print_if, adaptive_chunksize, afm_iterator, warn_if, summary_df
 from definitions import *
 import glob
 import time
 from math import ceil
-
-test_eve = set()
-test_cpt = set()
+import numpy as np
 
 def all_proteins():
     """
@@ -40,7 +38,7 @@ def create_parser():
     parser.add_argument(
         "--action",
         type=str,
-        choices=["init-DB", "update-DB", "delete-DB", "score-ESM", "score-EVE", "score-AFM"],
+        choices=["init-DB", "update-DB", "delete-DB", "score-ESM", "score-EVE", "score-AFM", "rank-DS", "to-csv"],
         default="init-DB",
         help="init-DB: initialize project database according to the supplied in the csv file\n"
              "update-DB: update project database according to the supplied in the csv file\n"
@@ -151,6 +149,24 @@ def create_parser():
     )
 
     parser.add_argument(
+        "--include-type",
+        type=int,
+        default=0,
+        choices=[0, 1],
+        help="whether summary csv  should include esm and eve score types\n"
+             "1 - include, 0 - omit, default",
+    )
+
+    parser.add_argument(
+        "--ds-thr",
+        type=int,
+        default=2,
+        choices=list(range(1, len(AVAILABLE_MODELS))),
+        help="Number of models scores required to calculate DSRank \n"
+             "default is 2",
+    )
+
+    parser.add_argument(
         "-v", "--verbose",
         type=int,
         choices=[0, 1, 2, 3],
@@ -193,6 +209,15 @@ def create_new_records(args, *rowiters):
             os.remove(rf'DB\test_m\{gene}_{mut_desc}.txt')
             skipped.append(idx)
     return skipped
+
+
+def to_csv(include_type=False):
+    df = summary_df(include_status=include_type)
+    for mutation in all_mutations():
+        df.loc[len(df)+1] = mutation.scores_to_csv(include_status=include_type)
+    df.replace(0, np.nan, inplace=True)
+    df.replace(-1, np.nan, inplace=True)
+    return df
 
 
 def build_db(args, target, workers):
@@ -328,6 +353,31 @@ def calc_mutations_esm_scores(args, analyzer, recalc=False, iter_desc=''):
     return successful
 
 
+def calc_mutations_dsrank(n_scores_thr):
+    """
+
+    :param n_scores_thr: int number of score under which ds-rank will be considered None
+    :return:
+    """
+    df = to_csv()
+    #  MIN-MAX SCORES NORMALIZATION
+    df[EVE_COL] = (df[EVE_COL] - df[EVE_COL].min()) / (df[EVE_COL].max() - df[EVE_COL].min())
+    df[AFM_COL] = (df[AFM_COL] - df[AFM_COL].min()) / (df[AFM_COL].max() - df[AFM_COL].min())
+    df[ESM_COL] = (df[ESM_COL] - df[ESM_COL].min()) / (df[ESM_COL].max() - df[ESM_COL].min())
+    df[ESM_COL] = 1 - df[ESM_COL]
+    df['n_scores'] = df[[EVE_COL, ESM_COL, AFM_COL]].count(axis=1, numeric_only=False)
+    df[DS_COL] = (df[EVE_COL].fillna(0) + df[ESM_COL].fillna(0) + df[AFM_COL].fillna(0)) / df['n_scores']
+    for _, row in df.iterrows():
+        protein = Protein(ref_name=row[PROT_COL])
+        mutation = Mutation(f"p.{row[MUT_COL]}", protein)
+        score = None if row['n_scores'] < n_scores_thr else float(row[DS_COL])
+        mutation.update_score(model='DS', score=score)
+    # change all values under thr to nan
+    df.loc[df['n_scores'] < n_scores_thr, DS_COL] = np.nan
+    df.drop('n_scores', axis=1, inplace=True)
+    return df
+
+
 def main(args):
     workers = args.workers if args.workers else cpu_count()
     print_if(args.verbose, VERBOSE['program_progress'], f"running on {workers} CPUs")
@@ -364,6 +414,12 @@ def main(args):
         if action == 'score-ESM':
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating ESM2b scores...")
             calc_mutations_esm_scores(args, analyzer, recalc=args.recalc)
+        if action == 'rank-DS':
+            print_if(args.verbose, VERBOSE['program_progress'], f"Calculating Dataset Rank values...")
+            return calc_mutations_dsrank(args.ds_thr)
+        if action == 'to-csv':
+            print_if(args.verbose, VERBOSE['program_progress'], f"extracting scored to csv...")
+            return to_csv(args.include_type)
 
 
 
@@ -372,30 +428,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     start_time = time.time()
     main(args)
-    c = 0
-    for m in all_mutations():
-        if m.has_afm:
-            c+=1
-    print(f'afm count {c}')
     print("--- %s seconds ---" % (time.time() - start_time))
-
-'''
-    for m in all_mutations():
-        prot = m.protein
-        prot.muts[m.extended_description][MODELS_SCORES['ESM']] = None
-        prot._update_DB(pjoin(prot.directory, prot.MUTS), prot.muts, mode='pickle')
-
-'''
-
-'''
-if mutation.long_name in ['ANKAR_H539L', 'CALCOCO1_K425N', 'FRG2C_D9N', 'FRG2C_A259T', 'GALNT5_G387E',
-                          'HLA-DRB1_F69Y', 'MAGEC1_S309C', 'MUC16_Q13566R', 'MUC3A_G8S', 'OR1E1_L130M',
-                          'OR4A16_I43T', 'PABPC3_A181T', 'PABPC3_P191T', 'PABPC3_I195V',
-                          'SH3TC1_R878W']:
-    print()
-    print(mutation.long_name)
-    print(score)
-    print(eve_type)
-    print(mutation.protein.muts)
-    print('*' * 30)
-'''

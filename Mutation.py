@@ -208,7 +208,6 @@ class Mutation:
         """
         self._ref_sequences = {'manual':  seq}
 
-
     @property
     def pdbs(self):
         """
@@ -276,13 +275,6 @@ class Mutation:
         return set()
 
     @property
-    def mentioned(self):
-        """
-        returns whether the protein was mentioned in litriture
-        """
-        return self._protein.mentioned
-
-    @property
     def for_bert_location(self, offset=1):
         return self.origAA + str(self.loc-offset) + self.changeAA
 
@@ -297,7 +289,6 @@ class Mutation:
             warn_if(self._v, VERBOSE['thread_warnings'], f"eveScore not initialized for mutation - try to add mutation again")
             warn_if(self._v, VERBOSE['raw_warnings'], f"\n{self._protein.muts}")
             return None
-
 
     @property
     def has_esm(self):
@@ -333,32 +324,29 @@ class Mutation:
         return self._protein.muts[self.extended_description][EVE_TYPE]
 
     @property
+    def esm_type(self):
+        return self._protein.muts[self.extended_description][ESM_TYPE]
+
+    @property
     def firm_score(self):
+        '''
+        This method was deprecated - FIRM is no longer supported
+        :return:
+        '''
+        warnings.warn('This method is no longer supported use AlphaMissense (afm) scores instead')
+        return None
         s = self._protein.muts[self.extended_description]['firmScore']
         if isinstance(s, float) or isinstance(s, int):
             return s
         return -1
 
     @property
-    def consensus_score(self):
-        return self._protein.muts[self.extended_description]['consensusScore']
-
-    @property
-    def rank_score(self):
-        return self._protein.muts[self.extended_description]['rank']
-
-    @property
-    def has_firm(self):
-        return self.firm_score not in {-1, 'asr', 'err'}
-
-    @property
-    def alph_conf(self):
-        return self.protein.mutations[self.extended_description]['AlphaFoldConfidence']
+    def ds_rank(self):
+        return self._protein.muts[self.extended_description][DS_RANK]
 
     @property
     def n_scores(self):
-        return float(self.has_firm + self.has_eve + self.has_esm)
-
+        return float(self.has_afm + self.has_eve + self.has_esm)
 
     @staticmethod
     def extract_name(description):
@@ -463,13 +451,13 @@ class Mutation:
     def update_score(self, model, score, eve_type='', esm_type=''):
         """
         updates mutation model scores
-        :param model: str one of: EVE | ESM | AFM
+        :param model: str one of: EVE | ESM | AFM | DS
         :param score: float score to update
         :param esm_type: specification of model used for eveModel score
         :param eve_type: specification of inference used in esm
         :return:
         """
-        assert model in AVAILABLE_MODELS, f"model must be one of {' '.join(AVAILABLE_MODELS)}"
+        assert model in AVAILABLE_SCORES, f"model must be one of {' | '.join(AVAILABLE_SCORES)}"
         assert isinstance(score, (float, int, type(None))), 'score must be either float or None'
         prot = self.protein.reload()
         prot.muts[self.extended_description][MODELS_SCORES[model]] = score
@@ -504,17 +492,20 @@ class Mutation:
     def print_status(self):
         print(f"protein name:           {self.protein_name}")
         print(f"mutation symbol:        {self.name}")
-        print(f"esm score (min):       {round(self.esm_score, 3)}")
-        try:
-            print(f"firm score:             {round(self.firm_score, 3)}")
-        except TypeError:
-            print(f"firm score:             {self.firm_score}")
-        print(f"eve score & status:     {round(self.eve_score, 3)}, {self.eve_prediction}")
-        print(f"interface score:        {self.min_interface()}")
-        print(f"consensus_score:        {self.consensus_score}")
-        print(f"rank:                   {self.rank_score}")
-        print(f"litereture mention:     {self.mentioned}")
-        print(f"matching pdbs:          {self.print_pdbs()}")
-        print(f"proteins pdbs:          {list(self.protein.pdbs.keys())}")
-        print(f"alphafold conf:         {self.alph_conf}")
-        print(f"known interactions:     {self.protein.interactions}")
+        print(f"esm score:       {round(self.esm_score, 3)}")
+        print(f"afm score:             {round(self.afm_score, 3)}")
+        print(f"eve score & status:     {round(self.eve_score, 3)}, {self.eve_type}")
+
+    def scores_to_csv(self, include_status=False):
+        """
+        :param include_status: bool whether to include esm type and eve type
+        :return: list of scores eve, esm, afm in csv format None will be rep;ace with 0 or -1
+        """
+        esm_score = self.esm_score if self.esm_score is not None else 0
+        afm_score = self.afm_score if self.afm_score is not None else 0
+        ds_rank = self.ds_rank if self.ds_rank is not None else -1
+        if include_status:
+            return [self.protein_name, self.name, self.eve_score, self.eve_type, esm_score,
+                    self.esm_type, afm_score, ds_rank]
+        else:
+            return [self.protein_name, self.name, self.eve_score, esm_score, afm_score, ds_rank]

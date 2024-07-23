@@ -117,14 +117,6 @@ class Protein:
             return self._Uids['non_reviewed'][0]
         return ''
 
-
-    @property
-    def mentioned(self):
-        """
-        returns whethere the protein was mentioned in litriture
-        """
-        return Analyze.ProteinAnalyzer()._search_litriture(self, bool=True)
-
     @property
     def interactions(self):
         return Analyze.ProteinAnalyzer().interactions(self)
