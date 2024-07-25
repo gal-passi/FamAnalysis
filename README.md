@@ -14,7 +14,7 @@ We provide here a user-friendly command line interface of the DSRank methodology
    as described in the study [Genome-wide prediction of disease variant effects with a deep protein language model](https://www.nature.com/articles/s41588-023-01465-0) - official GitHub repository (https://github.com/ntranoslab/esm-variants.git).
 4. The current version can run on standard CPUs and does not require direct model inference.
 
-The pipeline consists of 3 stages:
+**The pipeline consists of 3 stages:**
 1. Create protein and mutations objects based on input data by pulling all relevant metadata from UniProtKB. 
 2. Calculate pathogenicity scores using ESM, AlphaMissense and [EVEmodel](https://www.nature.com/articles/s41586-021-04043-8).
 3. Normalize models scores and rank variants using an aggregated acore - DSrank (see paper).
