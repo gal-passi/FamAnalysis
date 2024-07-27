@@ -104,3 +104,9 @@ To create a csv file summarizing all scores, run:
 main.py --data-path example.csv --action to-csv --out-path results.csv 
 
 use `--include-type 1` to include esm and eve score types in output file. 
+
+## Reference
+
+If you use this code, please cite the following [paper](https://academic.oup.com/bib/article/25/4/bbae346/7717952):
+
+
