@@ -6,7 +6,7 @@ hash_url = lambda url: sha256(url).hexdigest()
 
 #  CONTACT INFO CHANGE TO YOUR EMAIL
 
-CONTACT = "gal.passi@mail.huji.ac.il"
+CONTACT = ""
 HEADERS = {'User-Agent': 'Python {}'.format(CONTACT)}
 
 #  VERBOSE THRESHOLDS
@@ -18,11 +18,11 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 #  DIRECTORIES
 
 ROOT_DIR = dirname(abspath(__file__))
-DB = 'DB_test'
+DB = 'DB'
 DB_PATH = pjoin(ROOT_DIR, DB)
-PROTEINS = 'test_p'
+PROTEINS = 'proteins'
 PROTEIN_PATH = pjoin(DB_PATH, PROTEINS)
-MUTATIONS = 'test_m'
+MUTATIONS = 'mutations'
 MUTATION_PATH = pjoin(DB_PATH, MUTATIONS)
 AFM_PATH = pjoin(DB_PATH, 'AFM')
 EVE_PATH = pjoin(DB_PATH, 'EVE')
