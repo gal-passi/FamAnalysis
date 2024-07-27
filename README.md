@@ -1,6 +1,6 @@
-# Family Analysis Pipeline
+   # Family Analysis Pipeline
 
-This repository contains code and tools developed for the paper Discovering predisposing genes for hereditary breast cancer using deep learning (https://academic.oup.com/bib/article/25/4/bbae346/7717952).
+This repository contains code and tools developed for the paper Discovering Predisposing Genes for Hereditary Breast Cancer Using Deep Learning (https://academic.oup.com/bib/article/25/4/bbae346/7717952).
 
 # Overview
 
