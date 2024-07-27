@@ -151,10 +151,10 @@ def create_parser():
     )
 
     parser.add_argument(
-        "--cpt_offset",
+        "--offset",
         type=int,
         default=0,
-        help="offset of mutation index in CPT records default is 0",
+        help="offset of mutation index default is 0",
     )
 
     parser.add_argument(
@@ -220,13 +220,14 @@ def create_new_records(args, *rowiters):
     return skipped
 
 
-def to_csv(include_type=False, outpath='summary.csv'):
+def to_csv(include_type=False, outpath=''):
     df = summary_df(include_status=include_type)
     for mutation in all_mutations():
         df.loc[len(df)+1] = mutation.scores_to_csv(include_status=include_type)
     df.replace(0, np.nan, inplace=True)
     df.replace(-1, np.nan, inplace=True)
-    df.to_csv(outpath)
+    if outpath:
+        df.to_csv(outpath)
     return df
 
 
@@ -335,7 +336,7 @@ def calc_mutations_eve_scores(args, analyzer, recalc=False, iter_desc='', impute
             tasks = [mut for mut in all_mutations() if not mut.has_eve]
         for mutation in tqdm.tqdm(tasks, desc=iter_desc, total=len(tasks)):
             print_if(args.verbose, VERBOSE['thread_progress'], f"Calculating CPT scores for {mutation.long_name}")
-            score, eve_type = analyzer.score_mutation_eve_impute(mut=mutation, offset=args.cpt_offset, gz=True)
+            score, eve_type = analyzer.score_mutation_eve_impute(mut=mutation, offset=args.offset, gz=True)
             if score != -1:
                 successful += 1
                 mutation.update_score('EVE', score, eve_type=eve_type)
@@ -359,7 +360,7 @@ def calc_mutations_esm_scores(args, analyzer, recalc=False, iter_desc=''):
     total_tasks = len(tasks)
     for mutation in tqdm.tqdm(tasks, desc=iter_desc, total=len(tasks)):
         print_if(args.verbose, VERBOSE['thread_progress'], f"Calculating ESM1b scores for {mutation.long_name}")
-        score, score_type = analyzer.score_mutation_esm(mut=mutation)
+        score, score_type = analyzer.score_mutation_esm(mut=mutation, offset=args.offset)
         if score is not None:
             successful += 1
             mutation.update_score('ESM', score, esm_type=score_type)
@@ -433,7 +434,7 @@ def main(args):
             return calc_mutations_dsrank(args.ds_thr)
         if action == 'to-csv':
             print_if(args.verbose, VERBOSE['program_progress'], f"extracting scored to csv...")
-            return to_csv(args.include_type)
+            return to_csv(args.include_type, args.out_path)
 
 
 
