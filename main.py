@@ -154,7 +154,7 @@ def create_parser():
         "--offset",
         type=int,
         default=0,
-        help="offset of mutation index default is 0",
+        help="offset for mutation index default is 0",
     )
 
     parser.add_argument(
