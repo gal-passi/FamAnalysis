@@ -103,7 +103,7 @@ use `--ds-thr` flag to set the threshold for the minimal number of model scores 
 
 To create a CSV file summarizing all scores, run:
 
-main.py --data-path example.csv --action to-csv --out-path results.csv 
+`main.py --data-path example.csv --action to-csv --out-path results.csv`
 
 use `--include-type 1` to include esm and eve score types in output file. 
 
