@@ -40,7 +40,7 @@ After cloning the project, run:
 In `definition.py`, make sure to set `CONTACT` to your email address. This is required for UniProtKB requests.
 
 **Note:** In case of an unstable internet connection, `setup.py` may raise a `ConnectionError` while downloading large files. 
-Simply re-run the program from the method that crashed. The download will resume from the point where it stopped.
+Simply re-run the program starting from the method that crashed. The download will resume from the point where it stopped.
 
 # Running FamAnalysis 
 Run the following command to get help:
