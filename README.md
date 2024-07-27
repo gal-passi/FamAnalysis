@@ -55,11 +55,11 @@ Protein variants should be provided in the format shown in `example.csv`.
 
 To build protein and mutation objects for all variants run: 
 
-`python main.py --data-path example.csv --action to-csv`
+`python main.py --data-path example.csv --action init-DB`
 
 To limit CPUs used, run:
 
-`python main.py --data-path example.csv --action to-csv --workers 16`
+`python main.py --data-path example.csv --action init-DB --workers 16`
 
 **Note:** When using > 16 CPUs or if internet connection is unstable it may be required to increase `TIMEOUT`, `WAIT_TIME` and `RETRIES` values in `definitions.py`
 
