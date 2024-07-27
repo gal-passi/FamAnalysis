@@ -26,8 +26,6 @@ class ProteinAnalyzer:
         self._cpt_exgene = {basename(p)[:-CPT_TRUNCATE_TAIL] for p in glob.glob(pjoin(CPT_EXGENE_PATH, '*.csv.gz'))}
         self.eve_records = {basename(p)[:-EVE_TRUNCATE_TAIL] for p in glob.glob(pjoin(EVE_VARIANTS_PATH, '*.csv'))}
         self._unip = Connections.Uniport(verbose_level=verbose_level)
-        with open(self.STRINGS_REVERSE_INDEX_ROOT, "rb") as fp:
-            self.strings_rindex = pickle.load(fp)
         with open(EVE_INDEX_PATH_2, "rb") as fp:
             self.eve_index = pickle.load(fp)
         with open(EVE_INVERSE_INDEX, "rb") as fp:

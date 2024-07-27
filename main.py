@@ -41,8 +41,10 @@ def create_parser():
         choices=["init-DB", "update-DB", "delete-DB", "score-ESM", "score-EVE", "score-AFM", "rank-DS", "to-csv"],
         default="init-DB",
         help="init-DB: initialize project database according to the supplied in the csv file\n"
-             "update-DB: update project database according to the supplied in the csv file\n"
-             "score-[model]: calculate [model] scores for all missense variants in DB",
+             "score-[model]: calculate [model] scores for all missense variants in DB\n"
+             "rank-DS calculates an aggregated score of all three models by normalizing and averaging available scores"
+             "use --ds-thr to set threshold for number of models required to calc scores\n"
+             "to-csv outputs a summary file",
         nargs="+",
     )
 
@@ -50,7 +52,14 @@ def create_parser():
         "--data-path",
         type=str,
         default='data.csv',
-        help="path to csv file containing the data see README for expected format",
+        help="path to csv file containing the data see example.csv for expected format",
+    )
+
+    parser.add_argument(
+        "--out-path",
+        type=str,
+        default='summary.csv',
+        help="path to output csv file",
     )
 
     parser.add_argument(
@@ -211,12 +220,13 @@ def create_new_records(args, *rowiters):
     return skipped
 
 
-def to_csv(include_type=False):
+def to_csv(include_type=False, outpath='summary.csv'):
     df = summary_df(include_status=include_type)
     for mutation in all_mutations():
         df.loc[len(df)+1] = mutation.scores_to_csv(include_status=include_type)
     df.replace(0, np.nan, inplace=True)
     df.replace(-1, np.nan, inplace=True)
+    df.to_csv(outpath)
     return df
 
 
@@ -279,6 +289,8 @@ def calc_mutations_afm_scores(args, analyzer, chunk=None, iter_desc='', use_alia
     """
     successful = 0
     tasks = [mut for mut in all_mutations() if not mut.has_afm]
+    if not tasks:
+        return successful
     n_muts = len(tasks)
     if chunk is not None:
         uid_index = set(chunk['uniprot_id'].unique())
@@ -287,6 +299,8 @@ def calc_mutations_afm_scores(args, analyzer, chunk=None, iter_desc='', use_alia
         score = analyzer.score_mutation_afm(mutation, chunk=chunk, uid_index=uid_index, use_alias=use_alias)
         successful += score is not None
         mutation.update_score('AFM', score)
+        if successful == n_muts:
+            return successful
     return successful
 
 

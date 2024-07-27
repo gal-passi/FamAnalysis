@@ -28,7 +28,7 @@ AFM_PATH = pjoin(DB_PATH, 'AFM')
 EVE_PATH = pjoin(DB_PATH, 'EVE')
 CPT_PATH = pjoin(DB_PATH, 'CPT')
 ESM_PATH = pjoin(DB_PATH, 'ESM')
-DB_CHILDREN = ['AFM', 'CPT', 'EVE', 'ESM', 'Family', 'mutations', 'Patients', 'proteins', PROTEINS, MUTATIONS]
+DB_CHILDREN = ['AFM', 'CPT', 'EVE', 'ESM', 'Family', 'Patients', PROTEINS, MUTATIONS]
 CHILDREN_INDEX = {child: i for i, child in enumerate(DB_CHILDREN)}
 EVE_SETUP_INDEX_DIR = 'eve_index'
 
