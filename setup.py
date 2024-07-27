@@ -1,4 +1,3 @@
-import glob
 import pandas as pd
 from utils import afm_iterator, adaptive_chunksize, ugzip
 from utils import SafeDownloader

@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-import glob
 import warnings
 import requests
 from requests.adapters import HTTPAdapter, Retry
@@ -9,12 +8,9 @@ import sys
 import psutil
 import pandas as pd
 import gzip
-import shutil
 import hashlib
 from tqdm import tqdm
 import click
-
-ALPHAFOLD_PDB_URL = "https://alphafold.ebi.ac.uk/files/AF-{}-F1-model_v1.pdb"
 
 
 def print_if(verbose: object, thr: object, text: object) -> object:

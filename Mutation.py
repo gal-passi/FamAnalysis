@@ -2,12 +2,11 @@ import re
 import os
 import pickle
 import warnings
-
 import numpy as np
 import Analyze
 import Protein as P
 from definitions import *
-from utils import print_if, warn_if
+from utils import warn_if
 
 
 

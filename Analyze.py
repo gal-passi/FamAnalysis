@@ -1,6 +1,5 @@
 import os
 from os.path import basename
-import subprocess
 from subprocess import check_output
 import numpy as np
 from Bio import SeqIO
@@ -8,16 +7,10 @@ import json
 import warnings
 import glob
 import pandas as pd
-import Mutation
 import pickle
-from utils import adaptive_chunksize, make_fasta, afm_range_read, name_for_esm,sequence_from_esm_df
+from utils import afm_range_read, name_for_esm,sequence_from_esm_df
 import Connections
-from pathlib import Path
-import Patient
-import Family
-from copy import deepcopy
 from definitions import *
-import deprecation
 
 ROOT = os.path.join(os.path.dirname(__file__))
 

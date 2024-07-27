@@ -1,6 +1,5 @@
 import glob
-
-from Bio import Entrez, PDB, SeqIO
+from Bio import Entrez, PDB
 from urllib.error import HTTPError as HTTPError
 import re
 from definitions import *
