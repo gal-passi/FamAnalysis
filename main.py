@@ -11,9 +11,9 @@ from functools import partial
 from utils import print_if, adaptive_chunksize, afm_iterator, warn_if, summary_df
 from definitions import *
 import glob
-import time
 from math import ceil
 import numpy as np
+
 
 def all_proteins():
     """
@@ -380,10 +380,10 @@ def calc_mutations_dsrank(n_scores_thr):
 
 def main(args):
     workers = args.workers if args.workers else cpu_count()
-    print_if(args.verbose, VERBOSE['program_progress'], f"running on {workers} CPUs")
     analyzer = Analyze.ProteinAnalyzer()
     for action in args.action:
         if action == 'init-DB':
+            print_if(args.verbose, VERBOSE['program_progress'], f"running on {workers} CPUs")
             assert os.path.exists(args.data_path), f"could not locate data csv file at {args.data_path}"
             target = partial(create_new_records, args)
             skipped = build_db(args, target=target, workers=workers)
@@ -426,6 +426,4 @@ def main(args):
 if __name__ == "__main__":
     parser = create_parser()
     args = parser.parse_args()
-    start_time = time.time()
     main(args)
-    print("--- %s seconds ---" % (time.time() - start_time))

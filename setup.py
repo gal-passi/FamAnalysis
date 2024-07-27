@@ -1,6 +1,6 @@
 import glob
 import pandas as pd
-from utils import progress_bar, afm_iterator, adaptive_chunksize, ugzip
+from utils import afm_iterator, adaptive_chunksize, ugzip
 from utils import SafeDownloader
 from definitions import *
 import os
@@ -16,6 +16,7 @@ def create_directories():
     for subdir in DB_CHILDREN:
         os.mkdir(pjoin(DB_PATH, subdir))
     print("done")
+
 
 def create_afm_index():
     index = {}
@@ -37,15 +38,17 @@ def create_afm_index():
         file.write(json.dumps(ranges))
     print('done')
 
+
 def create_esm_index():
     df = pd.read_csv(pjoin(ESM_DATA_PATH, 'contents_u_df.csv'))
     index = {row['gene']: row['id'] for _, row in df.iterrows()}
     with open(ESM_INDEX_PATH, "w") as file:
         file.write(json.dumps(index))
 
+
 def download_afm():
     os.chdir(AFM_PATH)
-    downloader = SafeDownloader([AFM_PUBLIC_DATA], [AFM_DATA])
+    downloader = SafeDownloader([AFM_PUBLIC_DATA], [AFM_DATA + '.gz'])
     print('Downloading AlphaMissense source data...')
     downloader.download()
     print('Unzipping AlphaMissense data...')
@@ -53,6 +56,7 @@ def download_afm():
     ugzip(path=AFM_DATA + '.gz', outfile=AFM_DATA, chunksize=chunksize)
     os.chdir(ROOT_DIR)
     print('done')
+
 
 def download_eve(remove_zip=True):
     os.chdir(EVE_PATH)
@@ -79,9 +83,11 @@ def download_eve(remove_zip=True):
             if os.path.basename(file) != EVE_VARIANTS:
                 shutil.rmtree(file)
     os.chdir(ROOT_DIR)
-    shutil.move('eve_index.txt', EVE_INDEX_PATH_2)
-    shutil.move('eve_reverse_index.txt', EVE_INVERSE_INDEX)
+    shutil.move(pjoin(EVE_SETUP_INDEX_DIR, 'eve_index.txt'), EVE_INDEX_PATH_2)
+    shutil.move(pjoin(EVE_SETUP_INDEX_DIR, 'eve_reverse_index.txt'), EVE_INVERSE_INDEX)
+    shutil.rmtree(EVE_SETUP_INDEX_DIR)
     print('done')
+
 
 def download_cpt(remove_zip=True):
     os.chdir(CPT_PATH)
@@ -90,8 +96,7 @@ def download_cpt(remove_zip=True):
     downloader = SafeDownloader([CPT_EVE_DATA, CPT_IMPUTE_DATA_1, CPT_IMPUTE_DATA_2], filenames)
     print('Downloading CPT source data...')
     downloader.download()
-    print('Unzipping EVEModel data...')
-    # TODO might be a problem with nesting folders here
+    print('Unzipping CPT data...')
     for name in filenames:
         with zipfile.ZipFile(name, "r") as zip_ref:
             zip_ref.extractall(name[:-4])
@@ -99,11 +104,13 @@ def download_cpt(remove_zip=True):
     shutil.copytree(CPT_EVE_IMPUTE_PATH_2, CPT_EVE_IMPUTE_PATH_1, dirs_exist_ok=True)
     os.rename(CPT_IMPUTE_DATA_1_NAME, CPT_IMPUTE_DATA_NAME)
     shutil.rmtree(CPT_IMPUTE_DATA_2_NAME)
+    os.chdir(CPT_PATH)
     if remove_zip:
         for file in filenames:
             os.remove(file)
     os.chdir(ROOT_DIR)
     print('done')
+
 
 def download_esm(remove_zip=True):
     os.chdir(ESM_PATH)
@@ -119,6 +126,7 @@ def download_esm(remove_zip=True):
     os.chdir(ROOT_DIR)
     print('done')
 
+
 def download_all_data():
     download_afm()
     download_eve()
@@ -126,9 +134,16 @@ def download_all_data():
     download_esm()
 
 
-if __name__ == '__main__':
-    pass
-    #create_directories()
-    #download_data()
-    #create_afm_index()
+def main():
+    create_directories()
+    download_afm()
+    create_afm_index()
+    download_esm()
+    create_esm_index()
+    download_eve()
+    download_cpt()
+    print("Setup completed successfully")
 
+
+if __name__ == '__main__':
+    main()

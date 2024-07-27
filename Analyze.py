@@ -39,7 +39,6 @@ class ProteinAnalyzer:
             self.eve_index = pickle.load(fp)
         with open(EVE_INVERSE_INDEX, "rb") as fp:
             self.eve_reverse_index = pickle.load(fp)
-
         with open(AFM_DIRECTORY_PATH, 'r') as file:
             self.af_index = json.load(file)
         with open(AFM_RANGES_PATH, 'r') as file:
