@@ -47,6 +47,8 @@ Run the following command to get help:
 
 `python main.py --help`
 
+set verbose level using the `--verbose` flag.
+
 Protein variants should be provided in the format shown in `example.csv`.
 
 **Note:** DNA data (i.e., Chr, Start, End) is not required. If these fields are not available, please fill them with any arbitrary value.
