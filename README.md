@@ -18,3 +18,7 @@ We provide here a user-friendly command line interface of the DSRank methodology
 1. Create protein and mutations objects based on input data by pulling all relevant metadata from UniProtKB. 
 2. Calculate pathogenicity scores using ESM, AlphaMissense and [EVEmodel](https://www.nature.com/articles/s41586-021-04043-8).
 3. Normalize models scores and rank variants using an aggregated score - DSrank (see paper).
+
+#Setup
+
+pip install pandas requests tqdm psutil click wget bio
