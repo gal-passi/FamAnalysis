@@ -107,6 +107,6 @@ use `--include-type 1` to include esm and eve score types in output file.
 
 ## Reference
 
-If you use this code, please cite our [paper](https://academic.oup.com/bib/article/25/4/bbae346/7717952):
+If you use this code, please cite our [paper](https://academic.oup.com/bib/article/25/4/bbae346/7717952).
 
 
