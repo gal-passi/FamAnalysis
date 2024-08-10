@@ -327,6 +327,7 @@ class ProteinAnalyzer:
         file_path = pjoin(ESM_VARIANTS_PATH, search_name + ESM_FILE_SUFFIX)
         column = f"{mut.origAA} {mut.loc - offset}"
         data = pd.read_csv(file_path)
+        assert mut.changeAA in AA_SYN.keys(), 'invalid Amino Acid symbol'
         row = data[data.iloc[:, 0] == mut.changeAA].index.tolist()[0]
         if column in data.columns:
             return float(data[column][row]), 'direct'
