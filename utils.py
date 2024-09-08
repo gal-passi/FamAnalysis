@@ -187,7 +187,16 @@ def summary_df(include_status=False):
         return pd.DataFrame(columns=[PROT_COL, MUT_COL, EVE_COL, ESM_COL, AFM_COL, DS_COL])
 
 
-
+def create_patient_data(data, patient, columns, empty=None):
+    """
+    dataframe
+    :param columns: list of columns to include in patient DataFrame
+    :param data: DataFrame containing all data
+    :param patient: patient column name
+    :param empty: value for empty value if None assume Na
+    :return: df patient data
+    """
+    return data[data[patient] is not empty][columns]
 
 
 class SafeDownloader:

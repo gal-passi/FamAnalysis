@@ -10,7 +10,6 @@ from definitions import *
 from utils import print_if, warn_if
 from copy import deepcopy
 
-
 PATH = r"sequence.txt"
 PAD = 6
 
@@ -32,14 +31,14 @@ class Protein:
         Constructor for Protein Class. Must either contain free_text or ref_name
         :param free_text: optional initialization using free text i.e. LRRK2:NM_198578.1:exon48:c.G7134C:p.K2378N
         :param ref_name: optional initializor using protein ref name i.e. LRRK2
-        :param uniport_id: int optopnal uniport id. if not given the id will be extracted using the protein ref name
+        :param uniport_id: str optional uniport id / primary accession. if not given the id will be extracted using the protein ref name
         :param ncbi: int optional ncbi id if not given the id will be extracted using the protein ref name
         :param add_mut: bool if set to true the mutation in the free text will be added to the protein's mutations dict
         """
-        if (free_text == '') and (ref_name == ''):
+        if (not free_text) and (not ref_name) and (not uniport_id):
             raise ValueError("ERROR: Class initialization must contain either protein reference name "
-                             "or free description text\n" "USAGE: Protein('CUL7') | "
-                             "Protein('CUL7:NM_001168370:exon25:c.G4970A:p.R1657Q')")
+                             "or free description text or uniprot id \n" "USAGE: Protein('CUL7') | "
+                             "Protein('CUL7:NM_001168370:exon25:c.G4970A:p.R1657Q') | Protein(uniprot_id = Q14999)")
         self._v = verbose_level
         self._unip = Uniport(verbose_level=verbose_level)
         if free_text != '':
@@ -52,12 +51,13 @@ class Protein:
             else:
                 ncbi = ""
 
-        if ref_name == '' and not uniport_id:
+        if (not ref_name) and (not uniport_id):
             raise ValueError("ERROR: Unable to extract protein reference name, check input\n"
                              "USAGE: Protein('CUL7') | Protein('CUL7:NM_001168370:exon25:c.G4970A:p.R1657Q')")
         self.ncbi_id = ncbi
         ref_name = PROTEIN_ALIASES[ref_name] if ref_name in PROTEIN_ALIASES else ref_name
-        self._name, self.directory = ref_name, os.path.join(PROTEIN_PATH, ref_name)
+        self._name = uniport_id if not ref_name else ref_name
+        self.directory = os.path.join(PROTEIN_PATH, self._name)
         if not os.path.exists(self.directory):
             if not load_only:
                 print_if(self._v, VERBOSE['thread_progress'], f"Creating new protein {ref_name}:")
@@ -68,7 +68,6 @@ class Protein:
         else:
             print_if(self._v, VERBOSE['thread_progress'], f"Protein {ref_name} was loaded")
             self._Uids, self.isoforms, self.pdbs, self.muts = self.load_protein()
-
 
     def __hash__(self):
         return hash(self.name)
@@ -146,7 +145,8 @@ class Protein:
         :return: {isoform: [pdb_pathes]}
         """
         if mut not in self.muts:
-            print_if(self._v, VERBOSE['thread_warnings'], f"{mut} not found make sure {mut} is added to {self.name} using self.add_mut")
+            print_if(self._v, VERBOSE['thread_warnings'],
+                     f"{mut} not found make sure {mut} is added to {self.name} using self.add_mut")
             return []
         return {iso: [os.path.join(self.directory, mut, pdb + ".ent") for pdb in self.muts[mut]["pdbs"][iso]]
                 for iso in self.muts[mut]["pdbs"]}
@@ -210,7 +210,7 @@ class Protein:
                 'main_entery': self._unip.entery_name(self),
                 'all_enteries': self._unip.entery_name(self, all_results=True),
                 'aliases': self._unip.synonms(by_name=self.name)}
-        if uniprot_id:
+        if uniprot_id and (uniprot_id not in uids['reviewed']):
             uids['reviewed'].append(uniprot_id)
         self._Uids = uids
         if self.Uid == '' and not self.ncbi_id:
@@ -300,7 +300,8 @@ class Protein:
                 data['start'] = dna_data['start']
                 data['end'] = dna_data['end']
             except KeyError:
-                warn_if(self._v, VERBOSE['thread_warnings'], f"DNA data supplied for {description} in wrong format skipping:\n{dna_data}")
+                warn_if(self._v, VERBOSE['thread_warnings'],
+                        f"DNA data supplied for {description} in wrong format skipping:\n{dna_data}")
                 data = deepcopy(NEW_MUTATION_DATA)
 
         self.muts[name] = data
@@ -315,6 +316,3 @@ class Protein:
         :return: list of relevent pdb-ids
         """
         return [p_id for p_id, seq in self.pdbs.items() if reference_sequence in seq]
-
-
-

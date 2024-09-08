@@ -131,7 +131,6 @@ class Uniport:
         :param reviewed: default is True will return only reviewed entities. set to False if no results are found
         :return:
         """
-        UIDS = 0
         if reviewed:
             query = UNIPORT_QUERY_URL + Q_UID_PROT.format(name, 'true')
             # params = {'format': 'tab', 'query': f"gene_exact:{name} AND organism:homo_sapiens AND reviewed:yes", 'columns': 'id'}
@@ -146,7 +145,7 @@ class Uniport:
         if r.text == '':
             return []
         rows = r.text.split('\n')
-        uids = [row.split('\t')[UIDS] for row in rows[1:-1]]
+        uids = [row.split('\t')[UIDS_COL_IDX] for row in rows[1:-1]]
         if len(uids) == 0:
             return ''
         return uids[0] if not all else uids

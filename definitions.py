@@ -62,6 +62,7 @@ Q_PDBS_UID = "fields=id,xref_pdb&format=tsv&query={}"
 Q_UID_PROT = "fields=&id&format=tsv&query={}+AND+organism_id:9606+AND+reviewed:{}"
 Q_UNIP_ENTERY = "https://rest.uniprot.org/uniprotkb/search?fields=&gene&format=tsv&query={}+AND+organism_id:9606"
 Q_UNIP_ENTERY_ALIAS = "https://rest.uniprot.org/uniprotkb/search?fields=&gene&format=tsv&query={}"
+UIDS_COL_IDX = 0
 
 # ERRORS & WARNINGS
 
@@ -116,6 +117,10 @@ PROTEIN_ALIASES = {'LOC100287896': 'LIPT2', 'FPGT-TNNI3K': 'TNNI3K', 'ATPSJ2-PTC
 NEW_MUTATION_DATA = {'chr': None, 'ref_na': None, 'alt_na': None, 'start': None, 'end': None, AFM_SCORE: NO_SCORE,
                      EVE_SCORE: NO_SCORE, ESM_SCORE: None, ESM_TYPE: NO_TYPE, EVE_PREDICTION: NO_SCORE,
                      EVE_TYPE: NO_TYPE, DS_RANK: None}
+
+#  PATIENTS AND FAMILY
+
+DEFAULT_PATIENT_COLUMNS = ['Chr', 'Start', 'End', 'Ref', 'Alt', 'Protein', 'Variant']
 
 #  ALPHA MISSENSE DATA
 
