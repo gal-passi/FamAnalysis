@@ -13,7 +13,6 @@ from copy import deepcopy
 PATH = r"sequence.txt"
 PAD = 6
 
-
 class Protein:
     """
     This class creates and retrieves local proteins DBs

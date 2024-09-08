@@ -177,7 +177,6 @@ def protein_exists(ref_name):
 
 def summary_df(include_status=False):
     """
-
     :param include_status: bool include esm and eve score type
     :return: DataFrame template for summary
     """
