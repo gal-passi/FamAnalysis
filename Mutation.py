@@ -379,7 +379,6 @@ class Mutation:
                     ref = seq[start: search_loc + padding]
                     found.add(ref)
                     references["Unknown_iso"] = ref
-
             except IndexError:
                 pass
 

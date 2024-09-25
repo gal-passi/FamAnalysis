@@ -6,7 +6,7 @@ hash_url = lambda url: sha256(url).hexdigest()
 
 #  CONTACT INFO CHANGE TO YOUR EMAIL
 
-CONTACT = ""
+CONTACT = "gal.passi@mail.huji.ac.il"
 HEADERS = {'User-Agent': 'Python {}'.format(CONTACT)}
 
 #  VERBOSE THRESHOLDS
@@ -20,9 +20,9 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 ROOT_DIR = dirname(abspath(__file__))
 DB = 'DB'
 DB_PATH = pjoin(ROOT_DIR, DB)
-PROTEINS = 'proteins'
+PROTEINS = 'proteins_30_fams'
 PROTEIN_PATH = pjoin(DB_PATH, PROTEINS)
-MUTATIONS = 'mutations'
+MUTATIONS = 'mutations_30_fams'
 MUTATION_PATH = pjoin(DB_PATH, MUTATIONS)
 AFM_PATH = pjoin(DB_PATH, 'AFM')
 EVE_PATH = pjoin(DB_PATH, 'EVE')
@@ -60,9 +60,15 @@ Q_ISOFORMS_KEY = "fields=id&format=tsv&query={}+AND+organism_id:9606"
 Q_PDBS_UID = "fields=id,xref_pdb&format=tsv&query={}"
 #  first protein ref name, second true/false
 Q_UID_PROT = "fields=&id&format=tsv&query={}+AND+organism_id:9606+AND+reviewed:{}"
+Q_UID_PROT_ALL = "fields=&gene&format=tsv&query={}+AND+organism_id:9606"
 Q_UNIP_ENTERY = "https://rest.uniprot.org/uniprotkb/search?fields=&gene&format=tsv&query={}+AND+organism_id:9606"
 Q_UNIP_ENTERY_ALIAS = "https://rest.uniprot.org/uniprotkb/search?fields=&gene&format=tsv&query={}"
+Q_UNIP_ALL_ISOFORMS = UNIPORT_QUERY_URL + "&format=fasta&query=" \
+                                          "(accession:{}+AND+is_isoform:true)+OR+(accession:{}+AND+is_isoform:false)"
 UIDS_COL_IDX = 0
+REVIEWED_COL_IDX = 2
+GENE_NAME_COL_IDX = 4
+UNIP_REVIEWED = 'reviewed'
 
 # ERRORS & WARNINGS
 

@@ -11,6 +11,9 @@ import gzip
 import hashlib
 from tqdm import tqdm
 import click
+import re
+import tempfile
+from Bio import SeqIO
 
 
 def print_if(verbose: object, thr: object, text: object) -> object:
@@ -108,6 +111,25 @@ def safe_post_request(session, url, timeout, verbose_level, warning_msg='connect
         return return_on_failure
     return r
 
+def remove_whitespaces(text):
+    """
+    removes all whitespaces from string
+    :param str:
+    :return:
+    """
+    return re.sub('\s', '', text)
+
+def process_fastas(text):
+    """
+    process multiple fasta sequences
+    :return: {id: sequence}
+    """
+    temp = tempfile.TemporaryFile(mode='w+t')
+    temp.writelines(text)
+    temp.seek(0)
+    ret = {seq_record.id: seq_record.seq for seq_record in SeqIO.parse(temp, "fasta")}
+    temp.close()
+    return ret
 
 def make_fasta(path, name, seq):
     full_path = os.path.join(path, f"{name}.fasta")

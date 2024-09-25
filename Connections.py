@@ -1,10 +1,9 @@
 import glob
 from Bio import Entrez, PDB
 from urllib.error import HTTPError as HTTPError
-import re
 from definitions import *
 from utils import print_if, warn_if, create_session, safe_post_request, safe_get_request
-from utils import progress_bar
+from utils import progress_bar, process_fastas
 import wget
 from os.path import basename
 
@@ -19,32 +18,23 @@ class Uniport:
         self._v = verbose_level
         self.pdpl = PDB.PDBList()
 
-    def fetch_uniport_sequences(self, Uid, expend=False):
+    def fetch_uniport_sequences(self, uid, ):
         """
         Retrieve all known isoforms from uniport
-        :param Uid: Uniport id only primary name
-        :param expend: bool optional whether to add uid to sequence name
+        :param uid: Uniport id only primary name
         :return: {uid_iso_index: sequence}
         """
         print_if(self._v, VERBOSE['thread_progress'], "Retrieving isoforms from Uniprt...")
-        if not Uid: return ''
-        sequences = {}
-        index = 1
         s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
-        while True:
-            currentUrl = f"{UNIPORT_URL}{Uid}-{index}.fasta"
-            response = safe_post_request(s, currentUrl, TIMEOUT, self._v, CON_ERR_FUS.format(Uid, currentUrl))
-            if not response:
-                return sequences
-            seq = response.text
-            if not response.ok:
-                print_if(self._v, VERBOSE['thread_progress'], "done")
-                return sequences
-            if not expend:
-                sequences[f"iso_{index}"] = self.remove_whitespaces(seq[seq.find("\n") + 1:])  # remove header
-            else:
-                sequences[f"{Uid}_iso_{index}"] = self.remove_whitespaces(seq[seq.find("\n") + 1:])
-            index += 1
+        url = Q_UNIP_ALL_ISOFORMS.format(uid, uid)
+        response = safe_post_request(s, url, TIMEOUT, self._v, CON_ERR_FUS.format(uid, url))
+        if not response.ok:
+            print_if(self._v, VERBOSE['thread_warnings'], CON_ERR_GENERAL.format('fetch_uniprot_sequences', uid))
+            return {}
+        if response.text == '':
+            print_if(self._v, VERBOSE['thread_warnings'], f"no sequences found for {uid}")
+            return {}
+        return process_fastas(response.text)
 
     def expend_isoforms(self, prot, limit=20, unique_key=''):
         """
@@ -123,115 +113,44 @@ class Uniport:
             print_if(self._v, VERBOSE['thread_progress'], f"done")
         return ret
 
-    def uid_from_name(self, name, all=False, reviewed=True):
+    def uid_from_name(self, name):
         """
         return uniprot-id given a protein ref_name
         :param name: protein ref_name
         :param all: optional return a list of all uids found
         :param reviewed: default is True will return only reviewed entities. set to False if no results are found
-        :return:
+        :return: {'reviewed': [...], 'non_reviewed': [...]}
         """
-        if reviewed:
-            query = UNIPORT_QUERY_URL + Q_UID_PROT.format(name, 'true')
-            # params = {'format': 'tab', 'query': f"gene_exact:{name} AND organism:homo_sapiens AND reviewed:yes", 'columns': 'id'}
-        else:
-            query = UNIPORT_QUERY_URL + Q_UID_PROT.format(name, 'false')
-            # params = {'format': 'tab', 'query': f"gene_exact:{name} AND organism:homo_sapiens", 'columns': 'id'}
+        ret = {'reviewed': [], 'non_reviewed': [], 'main_entery': [], 'all_enteries': [], 'aliases': []}
+        query = UNIPORT_QUERY_URL + Q_UID_PROT_ALL.format(name)
         s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
         # r = req.get(query, timeout=TIMEOUT)
         r = safe_get_request(s, query, TIMEOUT, self._v, CON_ERR_UFN.format(name))
         if not r:
-            return []
+            return ret
         if r.text == '':
-            return []
-        rows = r.text.split('\n')
-        uids = [row.split('\t')[UIDS_COL_IDX] for row in rows[1:-1]]
-        if len(uids) == 0:
-            return ''
-        return uids[0] if not all else uids
+            return ret
+        ret = self._process_uid_query(r.text)
+        return ret
 
-    def entery_name(self, protein=None, ref_name='', all_results=False):
-        """
-        :param protein: Protein obj
-        :param all_results: returns list of all entery name found if False returns the first
-        :return:
-        """
-        ENTERY_NAME = 1
-        if not protein and not ref_name:
-            raise ValueError("Must include eithe protein object or protein ref_name")
-
-        name = ref_name if ref_name else protein.name
-        url = Q_UNIP_ENTERY.format(name)
-        s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
-        # r = req.get(url, timeout=TIMEOUT)
-        r = safe_get_request(s, url, TIMEOUT, self._v, CON_ERR_GENERAL.format('entery_name', name))
-        if not r:
-            return ''
-        if r.text == '':
-            return ''
-        rows = r.text.split('\n')
-        entery_names = [row.split('\t')[ENTERY_NAME] for row in rows[1:-1]]
-        if len(entery_names) == 0:
-            return ''
-        return entery_names[0] if not all_results else entery_names
-
-    def synonms(self, protein=None, by_name=None):
-        """
-        :param name: protein object
-        :return: list of all synonyms for protein name
-        """
-        if not protein and not by_name:
-            return []
-        search_term = protein.Uid if protein else by_name
-        url = Q_UNIP_ENTERY_ALIAS.format(search_term)
-        s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
-        # r = req.get(url, timeout=TIMEOUT)
-        r = safe_get_request(s, url, TIMEOUT, self._v, CON_ERR_GENERAL.format('synonms', search_term))
-        if not r:
-            return ''
-        if r.text == '':
-            return []
-        res = []
-        for line in r.text.split('\n')[1:-1]:
-            res += line.split('\t')[4].split(" ")
-        return res
-
-    def fatch_all_NCBIs(self, ncbi_id):
-        idx = 0
-        united = {}
-        while True:
-            record = self.fetch_NCBI_seq(ncbi_id + f".{idx}")
-            if (len(record) == 0) and (idx > 0):
-                return united
-            united = {**united, **record}
-            idx += 1
-
-    def fetch_NCBI_seq(self, ncbi_id):
-        """
-        fetches amino acid sequence from ncbi
-        :param ncbi_id: str (format NM_001282166.1)
-        :return: {ncbi_id : sequence}
-        """
-        print_if(self._v, VERBOSE['thread_progress'], f"Retrieving isoform {ncbi_id} from NCBI...")
-        try:
-            handle = Entrez.efetch(db="nucleotide", id=ncbi_id, retmode="xml")
-        except HTTPError as e:
-            warn_if(self._v, VERBOSE['thread_warnings'],
-                    f'Unable to fetch NCBI record with id {ncbi_id} HTTPError...skipping')
-            warn_if(self._v, VERBOSE['raw_warnings'], f'\n{e}')
-            return {}
-        records = Entrez.read(handle)
-        try:
-            for dict_entry in records[0]["GBSeq_feature-table"]:
-                if dict_entry['GBFeature_key'] == 'CDS':
-                    for sub_dict in dict_entry["GBFeature_quals"]:
-                        if sub_dict['GBQualifier_name'] == 'translation':
-                            print_if(self._v, VERBOSE['thread_progress'], f"done")
-                            return {ncbi_id: sub_dict["GBQualifier_value"]}
-        except Exception as e:
-            warn_if(self._v, VERBOSE['thread_warnings'], f'Unable to fetch NCBI record with id {ncbi_id}...skipping')
-            warn_if(self._v, VERBOSE['raw_warnings'], f'\n{e}')
-            return {}
+    @staticmethod
+    def _process_uid_query(data):
+        ret = {'reviewed': [], 'non_reviewed': [], 'main_entery': [], 'all_enteries': [], 'aliases': []}
+        rows = data.split('\n')[1:-1]  # first is header last is blank
+        if not rows:
+            return ret
+        main_entry = rows[0].split('\t')[UIDS_COL_IDX]  # first entry is considered main
+        ret['main_entery'].append(main_entry)
+        for row in rows:
+            values = row.split('\t')
+            entry, reviewed, gene = values[UIDS_COL_IDX], values[REVIEWED_COL_IDX], values[GENE_NAME_COL_IDX].split(" ")
+            ret['all_enteries'].append(entry)
+            ret['aliases'] += gene
+            if reviewed == UNIP_REVIEWED:
+                ret['reviewed'].append(entry)
+            else:
+                ret['non_reviewed'].append(entry)
+        return ret
 
     def alphafold_confidence(self, prot, mut):
         """
@@ -287,15 +206,6 @@ class Uniport:
         seqs = [AA_SYN_REV[item.decode('utf-8')] for sublist in seqs for item in sublist if item != b'']
         return "".join(seqs)
 
-    @staticmethod
-    def remove_whitespaces(text):
-        """
-        removes all whitespaces from string
-        :param str:
-        :return:
-        """
-        return re.sub('\s', '', text)
-
     def download_pdb(self, id, path):
         """
         downloads specific pdb file and save to path as id.pdb
@@ -328,3 +238,43 @@ class Uniport:
         else:
             return False
 
+
+# will be deprecated
+
+def fatch_all_NCBIs(self, ncbi_id):
+    idx = 0
+    united = {}
+    while True:
+        record = self.fetch_NCBI_seq(ncbi_id + f".{idx}")
+        if (len(record) == 0) and (idx > 0):
+            return united
+        united = {**united, **record}
+        idx += 1
+
+
+def fetch_NCBI_seq(self, ncbi_id):
+    """
+    fetches amino acid sequence from ncbi
+    :param ncbi_id: str (format NM_001282166.1)
+    :return: {ncbi_id : sequence}
+    """
+    print_if(self._v, VERBOSE['thread_progress'], f"Retrieving isoform {ncbi_id} from NCBI...")
+    try:
+        handle = Entrez.efetch(db="nucleotide", id=ncbi_id, retmode="xml")
+    except HTTPError as e:
+        warn_if(self._v, VERBOSE['thread_warnings'],
+                f'Unable to fetch NCBI record with id {ncbi_id} HTTPError...skipping')
+        warn_if(self._v, VERBOSE['raw_warnings'], f'\n{e}')
+        return {}
+    records = Entrez.read(handle)
+    try:
+        for dict_entry in records[0]["GBSeq_feature-table"]:
+            if dict_entry['GBFeature_key'] == 'CDS':
+                for sub_dict in dict_entry["GBFeature_quals"]:
+                    if sub_dict['GBQualifier_name'] == 'translation':
+                        print_if(self._v, VERBOSE['thread_progress'], f"done")
+                        return {ncbi_id: sub_dict["GBQualifier_value"]}
+    except Exception as e:
+        warn_if(self._v, VERBOSE['thread_warnings'], f'Unable to fetch NCBI record with id {ncbi_id}...skipping')
+        warn_if(self._v, VERBOSE['raw_warnings'], f'\n{e}')
+        return {}

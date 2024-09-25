@@ -10,8 +10,6 @@ from definitions import *
 from utils import print_if, warn_if
 from copy import deepcopy
 
-PATH = r"sequence.txt"
-PAD = 6
 
 class Protein:
     """
@@ -204,11 +202,7 @@ class Protein:
         :param uniprot_id: optional if given will look for protein data using the given id
         :return:
         """
-        uids = {'reviewed': self._unip.uid_from_name(self.name, reviewed=True, all=True),
-                'non_reviewed': self._unip.uid_from_name(self.name, reviewed=False, all=True),
-                'main_entery': self._unip.entery_name(self),
-                'all_enteries': self._unip.entery_name(self, all_results=True),
-                'aliases': self._unip.synonms(by_name=self.name)}
+        uids = self._unip.uid_from_name(self.name)
         if uniprot_id and (uniprot_id not in uids['reviewed']):
             uids['reviewed'].append(uniprot_id)
         self._Uids = uids
@@ -225,8 +219,9 @@ class Protein:
 
         isoforms = self._unip.fetch_uniport_sequences(self.Uid)
         alphafold_seq = self._unip.alpha_seq(self)
-        ncbi = {} if not self.ncbi_id else self._unip.fatch_all_NCBIs(self.ncbi_id)
-        isoforms = {**isoforms, **ncbi, **alphafold_seq}
+        # deprecated ncbi
+        # ncbi = {} if not self.ncbi_id else self._unip.fatch_all_NCBIs(self.ncbi_id)
+        isoforms = {**isoforms, **alphafold_seq}
         self.isoforms = isoforms
         with open(os.path.join(self.directory, self.ISOFORMS), "w") as file:
             file.write(json.dumps(isoforms))
