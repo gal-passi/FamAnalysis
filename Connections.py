@@ -3,7 +3,7 @@ from Bio import Entrez, PDB
 from urllib.error import HTTPError as HTTPError
 from definitions import *
 from utils import print_if, warn_if, create_session, safe_post_request, safe_get_request
-from utils import progress_bar, process_fastas
+from utils import progress_bar, process_fastas, read_in_chunks, process_pdb_ids_query
 import wget
 from os.path import basename
 
@@ -67,51 +67,66 @@ class Uniport:
             isoforms = {**isoforms, **res}
         return isoforms
 
-    def fetch_pdbs(self, Uid="", prot=None, reviewed=True):
+    def fetch_pdbs(self, uids=None, prot=None, reviewed=True):
         """
         retreives all known BPDs of a the given uniport id or protein object
-        :param Uid: uniport id
+        :param uid: set of uniprot ids
         :param prot: optional Protein obj find pdbs for all known uids
         :param reviewed: bool, default True, if False non-reviewed pdbs will be added.
                 NOTE this may exyended running time significantly.
         :return: dict {pdb_id: seqence}
         """
         if prot:
-            pdbs = {}
-            reviewed = set(prot.all_uids()['reviewed'])
-            nreviewed = set(prot.all_uids()['non_reviewed']).difference(reviewed)
-            for uid in reviewed:
-                pdbs = {**pdbs, **self.fetch_pdbs(uid)}
-            if not reviewed:
-                for uid in nreviewed:
-                    pdbs = {**pdbs, **self.fetch_pdbs(uid)}
-            return pdbs
+            reviewed_ids = set(prot.all_uids()['reviewed'])
+            nreviewed_ids = set(prot.all_uids()['non_reviewed']).difference(reviewed_ids)
+            uids = reviewed_ids if reviewed else nreviewed_ids
+        elif uids:
+            if isinstance(uids, str):
+                uids = {uids}
+        else:
+            raise ValueError(f"failed on {uids}")
+        print_if(self._v, VERBOSE['thread_progress'], f"Fetching Pdb ids...")
+        return self._fetch_pdbs_in_chunks(list(uids))
 
-        if not Uid:
-            return {}
 
-        # params = {'format': 'tab', 'query': 'ID:{}'.format(Uid), 'columns': 'id,database(PDB)'}
+    def _fetch_pdbs_in_chunks(self, uids):
+        """
+        helper for fetch pdbs
+        :param uid: set of uniprot ids to fetch
+        :return: dict {pdb_id: sequence}
+        """
+        pdbs = {}
         s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
-        query = UNIPORT_QUERY_URL + Q_PDBS_UID.format(Uid)
-        print_if(self._v, VERBOSE['thread_progress'], f"Fetching Pdb ids for {Uid}...")
-        r = safe_get_request(s, query, TIMEOUT, self._v, CON_ERR_FP_1.format(Uid))
-        if not r:
-            return {}
-        print_if(self._v, VERBOSE['thread_progress'], f"done")
-        pdbs = str(r.text).splitlines()[-1].split('\t')[-1].split(';')[:-1]
-        print_if(self._v, VERBOSE['thread_progress'], f"Fetching pdbs sequences...")
-        delta = len(pdbs) / 2  # for proteins with many pdbs default timeout might not be enough
-        ret = {}
-        # ret = {id: s.get(EBI_PDB_URL + f'{id}', timeout=TIMEOUT + delta).json()[id.lower()][0]['sequence']
-        #      for id in pdbs}
-        for id in pdbs:
+        for chunk in read_in_chunks(uids, CHUNK_SIZE):
+            query = Q_UNIP_ALL_PDBS
+            format = ''.join([f"((accession:{id})+OR+)" for id in chunk])
+            if not format:
+                return pdbs
+            format = format[:-4]  # remove last OR
+            query = query.format(format)
+            r = safe_get_request(s, query, TIMEOUT, self._v, CON_ERR_FP_1.format(query))
+            if not r.text:
+                continue
+            pdb_ids = process_pdb_ids_query(r.text)
+            pdbs |= self._query_pdb_seqs(s, pdb_ids)
+
+    @staticmethod
+    def _query_pdb_seqs(session, ids):
+        """
+        helper for fetch pdbs
+        :param ids: list of pdb ids to fetch
+        :return: dict {pdb_id: sequence}
+        """
+        delta = len(ids) / 2  # for proteins with many pdbs default timeout might not be enough
+        pdbs = {}
+        for id in ids:
             url = EBI_PDB_URL + f'{id}'
-            value = safe_get_request(s, url, TIMEOUT + delta, CON_ERR_FP_2.format(id, Uid))
+            value = safe_get_request(session, url, TIMEOUT + delta, CON_ERR_FP_2.format(id, id))
             if not value:
                 continue
-            ret[id] = value.json()[id.lower()][0]['sequence']
-            print_if(self._v, VERBOSE['thread_progress'], f"done")
-        return ret
+            pdbs[id] = value.json()[id.lower()][0]['pdb_sequence']
+        return pdbs
+
 
     def uid_from_name(self, name):
         """

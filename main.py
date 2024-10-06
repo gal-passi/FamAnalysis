@@ -40,7 +40,7 @@ def create_parser():
         type=str,
         choices=["init-DB", "update-DB", "delete-DB", "score-ESM", "score-EVE", "score-AFM", "rank-DS", "to-csv"],
         default="init-DB",
-        help="init-DB: initialize project database according to the supplied in the csv file\n"
+        help="init-DB: initialize project database according to the supplied csv file\n"
              "score-[model]: calculate [model] scores for all missense variants in DB\n"
              "rank-DS calculates an aggregated score of all three models by normalizing and averaging available scores"
              "use --ds-thr to set threshold for number of models required to calc scores\n"
@@ -79,7 +79,7 @@ def create_parser():
     parser.add_argument(
         "--variant-col",
         type=str,
-        default="Variant",
+            default="Variant",
         help="column name holding the missense variant description in csv file i.e. D17Y | p.D17Y",
     )
 
@@ -205,6 +205,8 @@ def create_new_records(args, *rowiters):
     created_protein = None
     for idx, row in rowiter:
         gene = row[args.protein_col]
+        if gene in REMOVED_PROTEINS:
+            continue
         mut_desc = row[args.variant_col]
         dna = {'chr': row[args.chromosome_col], 'start': row[args.dna_start_col], 'end': row[args.dna_end_col],
                'ref_na': row[args.wt_col], 'alt_na': row[args.alt_col]}
@@ -237,7 +239,7 @@ def build_db(args, target, workers):
     values_iter = lambda value, data: data[data[args.protein_col] == value].iterrows()
 
     # tasks are per-protein iterators to prevent race conditions
-    # in proteins with multiple mutations
+    # may happen with proteins having multiple mutations
     unique_rows = df[~df[args.protein_col].duplicated(keep=False)]
     unique_proteins = unique_rows[args.protein_col].unique()
     tasks_unique = [values_iter(value, unique_rows) for value in unique_proteins]
@@ -316,6 +318,7 @@ def calc_mutations_eve_scores(args, analyzer, recalc=False, iter_desc='', impute
     """
     # first iteration calculated using original EVEmodel
     successful = 0
+
     if recalc:
         tasks = list(all_mutations())
     else:

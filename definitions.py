@@ -6,7 +6,7 @@ hash_url = lambda url: sha256(url).hexdigest()
 
 #  CONTACT INFO CHANGE TO YOUR EMAIL
 
-CONTACT = "gal.passi@mail.huji.ac.il"
+CONTACT = ""
 HEADERS = {'User-Agent': 'Python {}'.format(CONTACT)}
 
 #  VERBOSE THRESHOLDS
@@ -20,9 +20,9 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 ROOT_DIR = dirname(abspath(__file__))
 DB = 'DB'
 DB_PATH = pjoin(ROOT_DIR, DB)
-PROTEINS = 'proteins_30_fams'
+PROTEINS = 'proteins'
 PROTEIN_PATH = pjoin(DB_PATH, PROTEINS)
-MUTATIONS = 'mutations_30_fams'
+MUTATIONS = 'mutations'
 MUTATION_PATH = pjoin(DB_PATH, MUTATIONS)
 AFM_PATH = pjoin(DB_PATH, 'AFM')
 EVE_PATH = pjoin(DB_PATH, 'EVE')
@@ -57,7 +57,6 @@ ALPHAFOLD_PDB_URL = "https://alphafold.ebi.ac.uk/files/AF-{}-F1-model_v1.pdb"
 
 Q_ISOFORMS_PROT = "fields=id&format=tsv&query=gene_exact:{}+AND+organism_id:9606"
 Q_ISOFORMS_KEY = "fields=id&format=tsv&query={}+AND+organism_id:9606"
-Q_PDBS_UID = "fields=id,xref_pdb&format=tsv&query={}"
 #  first protein ref name, second true/false
 Q_UID_PROT = "fields=&id&format=tsv&query={}+AND+organism_id:9606+AND+reviewed:{}"
 Q_UID_PROT_ALL = "fields=&gene&format=tsv&query={}+AND+organism_id:9606"
@@ -65,9 +64,12 @@ Q_UNIP_ENTERY = "https://rest.uniprot.org/uniprotkb/search?fields=&gene&format=t
 Q_UNIP_ENTERY_ALIAS = "https://rest.uniprot.org/uniprotkb/search?fields=&gene&format=tsv&query={}"
 Q_UNIP_ALL_ISOFORMS = UNIPORT_QUERY_URL + "&format=fasta&query=" \
                                           "(accession:{}+AND+is_isoform:true)+OR+(accession:{}+AND+is_isoform:false)"
+Q_UNIP_ALL_PDBS = UNIPORT_QUERY_URL + "fields=id,xref_pdb&format=tsv&query={}"
+
 UIDS_COL_IDX = 0
 REVIEWED_COL_IDX = 2
 GENE_NAME_COL_IDX = 4
+CHUNK_SIZE = 10
 UNIP_REVIEWED = 'reviewed'
 
 # ERRORS & WARNINGS
@@ -88,7 +90,7 @@ DOWNLOAD_NO_HASH_ERR = 'File {} has no hash.'
 DOWNLOAD_VALIDATION_MSG = 'File {} is validated.'
 
 #  AMINO ACIDS UTILS
-
+N_AA = 20
 AA_SYN = {"A": "ALA", "C": "CYS", "D": "ASP", "E": "GLU", "F": "PHE", "G": "GLY", "H": "HIS", "I": "ILE",
           "K": "LYS", "L": "LEU", "M": "MET", "N": "ASN", "P": "PRO", "Q": "GLN", "R": "ARG", "S": "SER",
           "T": "THR", "V": "VAL", "W": "TRP", "Y": "TYR"}
@@ -118,11 +120,21 @@ NO_TYPE = 'no_score'
 #  PROTEINS CONSTANTS
 
 PROTEIN_ALIASES = {'LOC100287896': 'LIPT2', 'FPGT-TNNI3K': 'TNNI3K', 'ATPSJ2-PTCD1': 'PTCD1', 'CCL4L1': 'CCL4L2',
-                   'PTGDR2': 'CCDC86', '4-SEPT': 'SEPT4'}
-
+                   'PTGDR2': 'CCDC86', '4-SEPT': 'SEPT4', 'TPTEP2-CSNK1E': 'CSNK1E', 'LOC101928841': 'ADPRHL1',
+                   'LOC102724159': 'PWP2', 'LOC100421372': 'MSANTD7', 'LOC102724488': 'SYT15B', 'LOC645177': 'IRAG2',
+                   'CBSL': 'CBS_HUMAN'}
+REMOVED_PROTEINS = ['LOC100996842', 'GLRA4', 'LOC390877', 'NM_001365196', 'LOC645188', 'COL4A2-AS2', 'PPP5D1',
+                    'FTCD-AS1', 'C9orf62', 'LOC107986453']
 NEW_MUTATION_DATA = {'chr': None, 'ref_na': None, 'alt_na': None, 'start': None, 'end': None, AFM_SCORE: NO_SCORE,
                      EVE_SCORE: NO_SCORE, ESM_SCORE: None, ESM_TYPE: NO_TYPE, EVE_PREDICTION: NO_SCORE,
                      EVE_TYPE: NO_TYPE, DS_RANK: None}
+
+
+#  MUTATIONS CONSTANTS
+
+A_A = "ACDEFGHIKLMNPQRSTVWXY"
+MUTATION_REGEX = rf'p\.(?P<symbol>(?P<orig>[{A_A}]){{1}}(?P<location>[\d]+)(?P<change>[{A_A}]){{1}})'
+REF_SEQ_PADDING = 5
 
 #  PATIENTS AND FAMILY
 
@@ -159,6 +171,9 @@ EVE_VARIANTS = 'variant_files'
 EVE_VARIANTS_PATH = pjoin(EVE_DATA_PATH, EVE_VARIANTS)
 EVE_PROT_DOWNLOAD_MSG = "Downloading protein {} from EVE"
 EVE_TRUNCATE_TAIL = 10
+EVE_SCORE_COLUMN = "EVE_scores_ASM"
+EVE_PREDICTION_COLUMN = "EVE_classes_75_pct_retained_ASM"
+EVE_MUTATION_COLUMN = 'mt_aa'
 
 CPT_DOWNLOAD_BASE = 'https://zenodo.org/records/7954657/files/'
 CPT_EVE_DATA = f'{CPT_DOWNLOAD_BASE}CPT1_score_EVE_set.zip?download=1'

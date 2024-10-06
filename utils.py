@@ -119,6 +119,7 @@ def remove_whitespaces(text):
     """
     return re.sub('\s', '', text)
 
+
 def process_fastas(text):
     """
     process multiple fasta sequences
@@ -127,9 +128,16 @@ def process_fastas(text):
     temp = tempfile.TemporaryFile(mode='w+t')
     temp.writelines(text)
     temp.seek(0)
-    ret = {seq_record.id: seq_record.seq for seq_record in SeqIO.parse(temp, "fasta")}
+    ret = {seq_record.id: str(seq_record.seq) for seq_record in SeqIO.parse(temp, "fasta")}
     temp.close()
     return ret
+
+
+def process_pdb_ids_query(text):
+    ids = []
+    for row in text.splitlines()[1:]:
+        ids += row.split('\t')[-1].split(';')[:-1]
+    return ids
 
 def make_fasta(path, name, seq):
     full_path = os.path.join(path, f"{name}.fasta")
@@ -148,6 +156,11 @@ def adaptive_chunksize(rowsize, ram_usage=0.5):
     """
     available = psutil.virtual_memory().available * ram_usage
     return available // rowsize
+
+
+def read_in_chunks(array, chunk_size):
+    for i in range(0, len(array), chunk_size):
+        yield array[i:i + chunk_size]
 
 
 def afm_iterator(chunksize, usecols=None):
@@ -189,13 +202,33 @@ def name_for_esm(name):
     return name
 
 
+def name_for_cpt(name):
+    if name.endswith('_HUMAN'):
+        return name
+    return name + '_HUMAN'
+
+
 def sequence_from_esm_df(esm_data):
     return ''.join([desc[0] for desc in esm_data.columns.to_list()[1:]])
+
+
+def sequence_from_cpt_df(cpt_data):
+    return ''.join([aa_change[0] for aa_change in cpt_data['mutant'][0::20]])
 
 
 def protein_exists(ref_name):
     return ref_name in set(os.listdir('DB/proteins'))
 
+def seacrh_by_ref_seq(main_seq, ref_seq, padding=REF_SEQ_PADDING):
+    """
+    :return: index of start row of wt AA
+    """
+    seq_start = main_seq.find(ref_seq)  # TODO handle edges - will be implemented in Mutation
+    if seq_start == -1:
+        return -1
+    aa_location = seq_start + padding
+    start_row_idx = aa_location * 20
+    return start_row_idx
 
 def summary_df(include_status=False):
     """

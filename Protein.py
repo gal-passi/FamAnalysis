@@ -121,7 +121,10 @@ class Protein:
     def aliases(self):
         return self._Uids['aliases']
 
-    def entery_name(self, all=False):
+    def entry_name(self, all=False):
+        """
+        :return: list of uniprot accessions
+        """
         return self._Uids['main_entery'] if not all else self._Uids['all_enteries']
 
     def all_uids(self):

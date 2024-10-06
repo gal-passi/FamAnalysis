@@ -14,9 +14,6 @@ class Mutation:
     """
     This class stores all information about a given mutation
     """
-    A_A = "ACDEFGHIKLMNPQRSTVWXY"
-    MUTATION_REGEX = rf'p\.(?P<symbol>(?P<orig>[{A_A}]){{1}}(?P<location>[\d]+)(?P<change>[{A_A}]){{1}})'
-
     def __init__(self, full_desc, protein, dna_data={}, load_only=False, verbose_level=1):
         """
         :param full_desc: string must contain p.{AA}{location}{AA}
@@ -133,7 +130,7 @@ class Mutation:
         :param description:
         :return: re.search obj if successful else raise ValueError
         """
-        res = re.search(self.MUTATION_REGEX, description)
+        res = re.search(MUTATION_REGEX, description)
         if not res:
             raise ValueError("Invalid input valid format of form p.{AA}{location}{AA}")
         return res
@@ -350,19 +347,19 @@ class Mutation:
     @staticmethod
     def extract_name(description):
         """
-        a static method to extract mutation reference name out of of free text
+        a static method to extract mutation reference name out of free text
         :param description: str general description
         :return: string mutation name
         """
-        aa = "ACDEFGHIKLMNPQRSTVWXY"
-        mutation_regex = rf'(?P<symbol>p\.(?P<orig>[{aa}]){{1}}(?P<location>[\d]+)(?P<change>[{aa}]){{1}})'
-        res = re.search(mutation_regex, description)
+        if not description.startswith('p.'):
+            description = 'p.' + description
+        res = re.search(MUTATION_REGEX, description)
         if res:
             return res.group('symbol')
         else:
-            raise ValueError
+            raise ValueError(description)
 
-    def _find_reference_sequences(self, seq="", padding=5):
+    def _find_reference_sequences(self, seq="", padding=REF_SEQ_PADDING):
         """
         :param protein: Protein object
         :param seq: optional specific sequence to search in
@@ -373,11 +370,13 @@ class Mutation:
         references = {}
         found = set()
         start = 0 if (search_loc - padding < 0) else (search_loc - padding)  # avoids out of range
-        if (seq != ''):
+        if seq != '':
             try:
                 if seq[search_loc] == self._orig:
                     ref = seq[start: search_loc + padding]
-                    found.add(ref)
+                    # sequences in edges may be too short
+                    if len(ref) == padding*2:
+                        found.add(ref)
                     references["Unknown_iso"] = ref
             except IndexError:
                 pass
@@ -386,7 +385,7 @@ class Mutation:
             try:
                 if seq[search_loc] == self._orig:
                     ref = seq[start: search_loc + padding]
-                    if ref not in found:
+                    if (ref not in found) and (len(ref) == padding*2):
                         found.add(ref)
                         references[iso] = ref
             except IndexError:

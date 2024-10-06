@@ -8,7 +8,8 @@ import warnings
 import glob
 import pandas as pd
 import pickle
-from utils import afm_range_read, name_for_esm,sequence_from_esm_df
+from utils import afm_range_read, name_for_esm, sequence_from_esm_df, name_for_cpt, \
+    sequence_from_cpt_df, seacrh_by_ref_seq, warn_if
 import Connections
 from definitions import *
 
@@ -203,13 +204,21 @@ class ProteinAnalyzer:
         data = pd.read_csv(path, low_memory=False).fillna(-1)
         references = mutation.ref_seqs.values()  # usually will be of size 1
         for reference in references:
+            if len(reference) < REF_SEQ_PADDING * 2:  # skip if red seq is too short
+                continue
             data_seq = ''.join(data["wt_aa"][0::20])
-            seq_start = data_seq.find(reference)  # TODO handle edges - will be implemented in Mutation
+            seq_start = seacrh_by_ref_seq(data_seq, reference)
             if seq_start == -1:
                 continue
-            aa_location = data_seq.find(mutation.origAA, seq_start, seq_start + 10)
-            row_index = (aa_location * 20) + AA_TO_INDEX_EVE[mutation.changeAA]
-            return data.iloc[row_index]["EVE_scores_ASM"], data.iloc[row_index]["EVE_classes_75_pct_retained_ASM"]
+            #  ref seq found in data - search through correct substitution
+            all_substitution = data[seq_start:seq_start + N_AA]
+            eve_variant = all_substitution[all_substitution[EVE_MUTATION_COLUMN] == mutation.changeAA]
+            if len(eve_variant) != 1:
+                warn_if(2, VERBOSE['thread_warnings'],
+                        f"error with EVE search by reference, in {mutation.long_name} skipping...")
+                continue
+            else:
+                return eve_variant.iloc[0][EVE_SCORE_COLUMN], eve_variant.iloc[0][EVE_PREDICTION_COLUMN]
         return -1, -1
 
     def score_mutation_eve_impute(self, mut, offset=0, gz=True):
@@ -217,35 +226,36 @@ class ProteinAnalyzer:
         :param mut: Mutation object
         :return: float CPT imputed score -1 if not found
         """
-        name = f"{mut.origAA}{mut.loc - offset}{mut.changeAA}"
-        entery_name = mut.protein.entery_name()
-        if entery_name == '': return -1, 'not_found'
+        entry_name = name_for_cpt(mut.protein.name)
+        if entry_name == '': return -1, 'not_found'
         #  case 1 reference name found in CPT records
-        if entery_name in self._cpt_ingene:
-            score = self._eve_cpt_interperter(name, entery_name, ingene=True, gz=gz)
+        if entry_name in self._cpt_ingene:
+            score = self._eve_cpt_interperter(mut, entry_name, offset=offset, ingene=True, gz=gz)
             if score != -1: return score, 'cpt_ingene'
-        if entery_name in self._cpt_exgene:
-            score = self._eve_cpt_interperter(name, entery_name, ingene=False, gz=gz)
+        if entry_name in self._cpt_exgene:
+            score = self._eve_cpt_interperter(mut, entry_name, offset=offset, ingene=False, gz=gz)
             if score != -1: return score, 'cpt_exgene'
         #  case 2 expend search to all known protein references
-        for entery_name in mut.protein.entery_name(all=True):
-            if entery_name in self._cpt_ingene:
-                score = self._eve_cpt_interperter(name, entery_name, ingene=True, gz=gz)
+        for name in mut.protein.aliases:
+            entry_name = name_for_cpt(name)
+            if entry_name in self._cpt_ingene:
+                score = self._eve_cpt_interperter(mut, entry_name, offset=offset, ingene=True, gz=gz)
                 if score != -1: return score, 'cpt_ingene'
-            if entery_name in self._cpt_exgene:
-                score = self._eve_cpt_interperter(name, entery_name, ingene=False, gz=gz)
+            if entry_name in self._cpt_exgene:
+                score = self._eve_cpt_interperter(mut, entry_name, offset=offset, ingene=False, gz=gz)
                 if score != -1: return score, 'cpt_exgene'
         return -1, 'not_found'
 
-    def _eve_cpt_interperter(self, desc, entery_name, ingene, gz=True):
+    def _eve_cpt_interperter(self, mut, entry_name, ingene, offset, gz=True):
         """
-        :param desc: missmatch description in form {AA}{index}{AA}
-        :param entery_name: Uniprot entery name
+        :param mut: Mutation object
+        :param entry_name: Uniprot entery name
         :param ingene: bool search ingene or exgene records
+        :param offset: int offset for mutation index
         :return: float score -1 if not found
         """
-        # print(f"called with {entery_name} and ingene={ingene}")
-        file = f"{entery_name}.csv"
+        desc = f"{mut.origAA}{mut.loc - offset}{mut.changeAA}"
+        file = f"{entry_name}.csv"
         if ingene:
             path = pjoin(CPT_INGENE_PATH, file)
         else:
@@ -256,8 +266,29 @@ class ProteinAnalyzer:
         else:
             df = pd.read_csv(path)
 
-        df = df[df[CPT_MUTATION_COLUMN] == desc][CPT_SCORE_COLUMN]
-        return -1 if len(df) == 0 else float(df.iloc[0])
+        direct_search = df[df[CPT_MUTATION_COLUMN] == desc][CPT_SCORE_COLUMN]
+        if len(direct_search) > 0:
+            return float(direct_search.iloc[0])
+        # mutation not found use reference sequence
+        else:
+            cpt_seq = sequence_from_cpt_df(df)
+            references = mut.ref_seqs.values()  # usually will be of size 1
+            for ref_seq in references:
+                if len(ref_seq) < REF_SEQ_PADDING*2:  # skip if red seq is too short
+                    continue
+                row_idx = seacrh_by_ref_seq(main_seq=cpt_seq, ref_seq=ref_seq)
+                if row_idx == -1:
+                    continue  # ref not found
+                else:
+                    #  ref seq found in data - search through correct substitution
+                    all_substitution = df[row_idx:row_idx + N_AA]
+                    cpt_variant = all_substitution[all_substitution[CPT_MUTATION_COLUMN].str.endswith(mut.changeAA)]
+                    if len(cpt_variant) != 1:
+                        warn_if(2, VERBOSE['thread_warnings'],
+                                f"error with CPT search by reference, in {mut.long_name} skipping...")
+                        continue
+                    else:
+                        return float(cpt_variant.iloc[0][CPT_SCORE_COLUMN])
 
     def score_mutation_afm(self, mutation, chunk=None, uid_index=None, offset=0, use_alias=False):
         """
@@ -294,7 +325,7 @@ class ProteinAnalyzer:
         :param mut: Mutation object
         :return: float ESM-1b score, None if not found
         """
-        entry_name = name_for_esm(mut.protein.entery_name())
+        entry_name = name_for_esm(mut.protein.entry_name())
         if entry_name == '':
             return None, 'failed'
         #  case 1 reference name found in ESM records
@@ -306,7 +337,7 @@ class ProteinAnalyzer:
         #  case 2 expend search to all known protein references
         #  case 3 unable to find - use reference sequence in isoforms
         temp_score = None
-        for entry_name in mut.protein.entery_name(all=True):
+        for entry_name in mut.protein.entry_name(all=True):
             entry_name = name_for_esm(entry_name)
             if entry_name in self.esm_index:
                 search_name = self.esm_index[entry_name]
