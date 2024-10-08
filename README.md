@@ -38,6 +38,7 @@ After cloning the project, run:
 `python setup.py`
 
 In `definition.py`, make sure to set `CONTACT` to your email address. This is required for UniProtKB requests.
+If using ESM3 also obtain a Hugging-Face read permission token and update `HUGGINGFACE_TOKEN` or provide the token as a command line argument using --token.
 
 **Note:** In case of an unstable internet connection, `setup.py` may raise a `ConnectionError` while downloading large files. 
 Simply re-run the program starting from the method that crashed. The download will resume from the point where it stopped.
