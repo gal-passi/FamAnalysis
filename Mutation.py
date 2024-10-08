@@ -448,7 +448,7 @@ class Mutation:
     def update_score(self, model, score, eve_type='', esm_type=''):
         """
         updates mutation model scores
-        :param model: str one of: EVE | ESM | AFM | DS
+        :param model: str one of: EVE | ESM | AFM | DS | ESM3
         :param score: float score to update
         :param esm_type: specification of model used for eveModel score
         :param eve_type: specification of inference used in esm

@@ -188,6 +188,12 @@ def create_parser():
              "mutation creation etc...\n "
     )
 
+    parser.add_argument(
+        "--token",
+        type=str,
+        default="",
+        help="Hugging-Face token required to use esm3",
+    )
     return parser
 
 
@@ -363,7 +369,7 @@ def calc_mutations_esm_scores(args, analyzer, recalc=False, iter_desc=''):
     total_tasks = len(tasks)
     for mutation in tqdm.tqdm(tasks, desc=iter_desc, total=len(tasks)):
         print_if(args.verbose, VERBOSE['thread_progress'], f"Calculating ESM1b scores for {mutation.long_name}")
-        score, score_type = analyzer.score_mutation_esm(mut=mutation, offset=args.offset)
+        score, score_type = analyzer.score_mutation_esm1b(mut=mutation, offset=args.offset)
         if score is not None:
             successful += 1
             mutation.update_score('ESM', score, esm_type=score_type)
@@ -429,8 +435,11 @@ def main(args):
         if action == 'score-EVE':
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating EVEmodel scores...")
             calc_mutations_eve_scores(args, analyzer, recalc=args.recalc, impute=args.use_cpt)
-        if action == 'score-ESM':
-            print_if(args.verbose, VERBOSE['program_progress'], f"Calculating ESM2b scores...")
+        if (action == 'score-ESM') or (action =='score-ESM1b'):
+            print_if(args.verbose, VERBOSE['program_progress'], f"Calculating ESM-1b scores...")
+            calc_mutations_esm_scores(args, analyzer, recalc=args.recalc)
+        if action =='score-ESM3':
+            print_if(args.verbose, VERBOSE['program_progress'], f"Calculating ESM-3 scores...")
             calc_mutations_esm_scores(args, analyzer, recalc=args.recalc)
         if action == 'rank-DS':
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating Dataset Rank values...")

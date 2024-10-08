@@ -1,6 +1,7 @@
 from os.path import dirname, abspath
 from os.path import join as pjoin
 from hashlib import sha256
+import torch
 
 hash_url = lambda url: sha256(url).hexdigest()
 
@@ -8,6 +9,11 @@ hash_url = lambda url: sha256(url).hexdigest()
 
 CONTACT = ""
 HEADERS = {'User-Agent': 'Python {}'.format(CONTACT)}
+HUGGINGFACE_TOKEN = ""  # obtain read permission token
+
+#  DEVICE
+
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 #  VERBOSE THRESHOLDS
 
@@ -90,6 +96,8 @@ DOWNLOAD_NO_HASH_ERR = 'File {} has no hash.'
 DOWNLOAD_VALIDATION_MSG = 'File {} is validated.'
 
 #  AMINO ACIDS UTILS
+
+A_A = "ACDEFGHIKLMNPQRSTVWXY"
 N_AA = 20
 AA_SYN = {"A": "ALA", "C": "CYS", "D": "ASP", "E": "GLU", "F": "PHE", "G": "GLY", "H": "HIS", "I": "ILE",
           "K": "LYS", "L": "LEU", "M": "MET", "N": "ASN", "P": "PRO", "Q": "GLN", "R": "ARG", "S": "SER",
@@ -106,14 +114,15 @@ FIRM_SCORE = 'firmScore'  # deprecated
 EVE_SCORE = 'eveScore'
 EVE_PREDICTION = 'evePrediction'
 ESM_SCORE = 'bertScore'
+ESM3_SCORE = 'esm3Score'
 ESM_TYPE = 'esmMethod'
 AFM_SCORE = 'afmScore'
 EVE_TYPE = 'eveMethod'
 DS_RANK = 'DSRank'
-AVAILABLE_MODELS = {'EVE', 'ESM', 'AFM'}
+AVAILABLE_MODELS = {'EVE', 'ESM', 'AFM', 'ESM3', 'ESM1B', 'ESM1b'}
 AVAILABLE_SCORES = AVAILABLE_MODELS | {'DS'}
-MODELS_SCORES = {'EVE': EVE_SCORE, 'ESM': ESM_SCORE, 'AFM': AFM_SCORE, 'FIRM': FIRM_SCORE,
-                 'EVE_METHOD': EVE_TYPE, 'ESM_METHOD': ESM_TYPE, 'DS': DS_RANK}
+MODELS_SCORES = {'EVE': EVE_SCORE, 'ESM': ESM_SCORE, 'ESM1B': ESM_SCORE, 'ESM1b': ESM_SCORE, 'ESM3': ESM3_SCORE,
+                 'AFM': AFM_SCORE, 'FIRM': FIRM_SCORE, 'EVE_METHOD': EVE_TYPE, 'ESM_METHOD': ESM_TYPE, 'DS': DS_RANK}
 NO_SCORE = -1.0
 NO_TYPE = 'no_score'
 
@@ -125,17 +134,14 @@ PROTEIN_ALIASES = {'LOC100287896': 'LIPT2', 'FPGT-TNNI3K': 'TNNI3K', 'ATPSJ2-PTC
                    'CBSL': 'CBS_HUMAN'}
 REMOVED_PROTEINS = ['LOC100996842', 'GLRA4', 'LOC390877', 'NM_001365196', 'LOC645188', 'COL4A2-AS2', 'PPP5D1',
                     'FTCD-AS1', 'C9orf62', 'LOC107986453']
-NEW_MUTATION_DATA = {'chr': None, 'ref_na': None, 'alt_na': None, 'start': None, 'end': None, AFM_SCORE: NO_SCORE,
-                     EVE_SCORE: NO_SCORE, ESM_SCORE: None, ESM_TYPE: NO_TYPE, EVE_PREDICTION: NO_SCORE,
-                     EVE_TYPE: NO_TYPE, DS_RANK: None}
-
 
 #  MUTATIONS CONSTANTS
 
-A_A = "ACDEFGHIKLMNPQRSTVWXY"
 MUTATION_REGEX = rf'p\.(?P<symbol>(?P<orig>[{A_A}]){{1}}(?P<location>[\d]+)(?P<change>[{A_A}]){{1}})'
 REF_SEQ_PADDING = 5
-
+NEW_MUTATION_DATA = {'chr': None, 'ref_na': None, 'alt_na': None, 'start': None, 'end': None, AFM_SCORE: NO_SCORE,
+                     EVE_SCORE: NO_SCORE, ESM_SCORE: None, ESM_TYPE: NO_TYPE, ESM3_SCORE: None,
+                     EVE_PREDICTION: NO_SCORE, EVE_TYPE: NO_TYPE, DS_RANK: None}
 #  PATIENTS AND FAMILY
 
 DEFAULT_PATIENT_COLUMNS = ['Chr', 'Start', 'End', 'Ref', 'Alt', 'Protein', 'Variant']

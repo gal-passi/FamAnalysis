@@ -320,7 +320,7 @@ class ProteinAnalyzer:
         # score not found
         return None
 
-    def score_mutation_esm(self, mut, offset=0):
+    def score_mutation_esm1b(self, mut, offset=0):
         """
         :param mut: Mutation object
         :return: float ESM-1b score, None if not found
@@ -352,6 +352,9 @@ class ProteinAnalyzer:
         if temp_score:
             return temp_score, score_type
         return None, 'failed'
+
+    def score_mutation_esm3(self, mut):
+        pass
 
     @staticmethod
     def _esm_interperter(mut, search_name, offset, use_ref_seq=False):
