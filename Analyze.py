@@ -9,7 +9,7 @@ import glob
 import pandas as pd
 import pickle
 from utils import afm_range_read, name_for_esm, sequence_from_esm_df, name_for_cpt, \
-    sequence_from_cpt_df, seacrh_by_ref_seq, warn_if
+    sequence_from_cpt_df, seacrh_by_ref_seq, warn_if, esm3_seq_logits, esm3_process_long_sequences
 import Connections
 from definitions import *
 
@@ -320,14 +320,16 @@ class ProteinAnalyzer:
         # score not found
         return None
 
-    def score_mutation_esm1b(self, mut, offset=0):
+    def score_mutation_esm1b_precomputed(self, mut, offset=0):
         """
         :param mut: Mutation object
+        :param offset: int offset to mutation index
         :return: float ESM-1b score, None if not found
         """
-        entry_name = name_for_esm(mut.protein.entry_name())
-        if entry_name == '':
+        entry_name = mut.protein.name
+        if not entry_name:
             return None, 'failed'
+        entry_name = name_for_esm(entry_name)
         #  case 1 reference name found in ESM records
         if entry_name in self.esm_index:
             search_name = self.esm_index[entry_name]
@@ -337,7 +339,7 @@ class ProteinAnalyzer:
         #  case 2 expend search to all known protein references
         #  case 3 unable to find - use reference sequence in isoforms
         temp_score = None
-        for entry_name in mut.protein.entry_name(all=True):
+        for entry_name in mut.protein.aliases:
             entry_name = name_for_esm(entry_name)
             if entry_name in self.esm_index:
                 search_name = self.esm_index[entry_name]
@@ -353,15 +355,50 @@ class ProteinAnalyzer:
             return temp_score, score_type
         return None, 'failed'
 
-    def score_mutation_esm3(self, mut):
-        pass
+    @staticmethod
+    def score_mutation_esm3(model, tokenizer, mut, method='masked_marginals', offset=1, log='', ):
+        """
+        :param model: ESM3 initiated model
+        :param tokenizer: ESM3 sequence tokenizer
+        :param mut: Mutation object
+        :param offset: int offset to mutation index
+        :param log: str
+        :param method: scoring method str: wt_marginals | mutant_marginals | masked_marginals
+        :return: tuple (float | None ESM3 masked marginal, str log)
+        """
+        if not mut.isoforms:
+            return None, log+'\tno_iso'
+        mut_idx = mut.loc - offset
+        log = log+'\toriginal_sequence'
+        #  choose sequence of minimal length
+        sequence = mut.sequence(how='min')
+        if len(sequence) > ESM3_MAX_LENGTH:
+            new_offset, sequence = esm3_process_long_sequences(sequence, mut_idx)
+            mut_idx = mut_idx - new_offset
+            log = log+'\ttrimmed_sequence'
+        #  mask sequence
+        assert sequence[mut_idx] == mut.origAA, 'sequence does not match wild-type AA - check offset'
+        # wt_marginals is default
+        input_seq = sequence
+        if method == 'mutant_marginals':
+            input_seq = sequence[:mut_idx] + mut.changeAA + sequence[mut_idx + 1:]
+        elif method == 'masked_marginals':
+            input_seq = sequence[:mut_idx] + '_' + sequence[mut_idx + 1:]
+        tokenized = tokenizer(input_seq)['input_ids']
+        tokens = torch.tensor(tokenized, dtype=torch.int64).unsqueeze(0).to(DEVICE)
+        print(f"calculating score {mut.long_name}")
+        logits = esm3_seq_logits(model=model, tokens=tokens, log=True, softmax=True, return_device='cpu')
+        # use masked marginals score
+        return logits[mut_idx][AA_ESM3_LOC[mut.changeAA]] - logits[mut_idx][AA_ESM3_LOC[mut.origAA]], log
 
     @staticmethod
     def _esm_interperter(mut, search_name, offset, use_ref_seq=False):
         file_path = pjoin(ESM_VARIANTS_PATH, search_name + ESM_FILE_SUFFIX)
         column = f"{mut.origAA} {mut.loc - offset}"
         data = pd.read_csv(file_path)
-        assert mut.changeAA in AA_SYN.keys(), 'invalid Amino Acid symbol'
+        assert mut.changeAA in A_A, f'invalid Amino Acid symbol {mut.long_name}'
+        if mut.changeAA == 'X':  # invalid change
+            return None, None
         row = data[data.iloc[:, 0] == mut.changeAA].index.tolist()[0]
         if column in data.columns:
             return float(data[column][row]), 'direct'

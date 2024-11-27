@@ -2,6 +2,7 @@ from os.path import dirname, abspath
 from os.path import join as pjoin
 from hashlib import sha256
 import torch
+import re
 
 hash_url = lambda url: sha256(url).hexdigest()
 
@@ -13,7 +14,7 @@ HUGGINGFACE_TOKEN = ""  # obtain read permission token
 
 #  DEVICE
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 #  VERBOSE THRESHOLDS
 
@@ -58,6 +59,15 @@ UNIPORT_QUERY_URL = "https://rest.uniprot.org/uniprotkb/search?"
 EBI_PDB_URL = "https://www.ebi.ac.uk/pdbe/api/pdb/entry/molecules/"
 PDB_DOWNLOAD_URL = "https://files.rcsb.org/download/"
 ALPHAFOLD_PDB_URL = "https://alphafold.ebi.ac.uk/files/AF-{}-F1-model_v1.pdb"
+ENTREZ_API_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
+ENTREZ_AA_RET = 'fasta_cds_aa'
+ENTREZ_NA_RET = 'fasta_cds_na'
+ENTREZ_SEARCH_URL = ENTREZ_API_URL + "esearch.fcgi?db=nuccore&term=NM_001385640&usehistory=y"
+ENTREZ_SEQ_FROM_KEYS = ENTREZ_API_URL + \
+                       "efetch.fcgi?db=nuccore&query_key={}&WebEnv={}&rettype={}&retmode=text"
+
+ENTREZ_WEBENV_RE = re.compile(r'\<WebEnv\>(\S+)\<\/WebEnv\>')
+ENTREZ_QUERYKEY_RE = re.compile(r'\<QueryKey\>(\d+)\<\/QueryKey\>')
 
 # QUERIES
 
@@ -108,6 +118,23 @@ AA_TO_INDEX_EVE = {"A": 0, "C": 1, "D": 2, "E": 3, "F": 4, "G": 5, "H": 6, "I": 
 AA_TO_INDEX_ESM = {'K': 0, 'R': 1, 'H': 2, 'E': 3, 'D': 4, 'N': 5, 'Q': 6, 'T': 7, 'S': 8, 'C': 9, 'G': 10,
                    'A': 11, 'V': 12, 'L': 13, 'I': 14, 'M': 15, 'P': 16, 'Y': 17, 'F': 18, 'W': 19}
 
+STOP_CODONS = ['tag', 'taa', 'tga']
+STOP_AA = '_'
+CODON_LENGTH = 3
+CODON_TRANSLATOR = {'ata': 'I', 'atc': 'I', 'att': 'I', 'atg': 'M', 'aca': 'T',
+                    'acc': 'T', 'acg': 'T', 'act': 'T', 'aac': 'N', 'aat': 'N',
+                    'aaa': 'K', 'aag': 'K', 'agc': 'S', 'agt': 'S', 'aga': 'R',
+                    'agg': 'R', 'cta': 'L', 'ctc': ' L', 'ctg': 'L', 'ctt': 'L',
+                    'cca': 'P', 'ccc': 'P', 'ccg': 'P', 'cct': 'P', 'cac': 'H',
+                    'cat': 'H', 'caa': 'Q', 'cag': 'Q', 'cga': 'R', 'cgc': 'R',
+                    'cgg': 'R', 'cgt': 'R', 'gta': 'V', 'gtc': 'V', 'gtg': 'V',
+                    'gtt': 'V', 'gca': 'A', 'gcc': 'A', 'gcg': 'A', 'gct': 'A',
+                    'gac': 'D', 'gat': 'D', 'gaa': 'E', 'gag': 'E', 'gga': 'G',
+                    'ggc': 'G', 'ggg': 'G', 'ggt': 'G', 'tca': 'S', 'tcc': 'S',
+                    'tcg': 'S', 'tct': 'S', 'ttc': 'F', 'ttt': 'F', 'tta': 'L',
+                    'ttg': 'L', 'tac': 'Y', 'tat': 'Y', 'taa': '_', 'tag': '_',
+                    'tgc': 'C', 'tgt': 'C', 'tga': '_', 'tgg': 'W'}
+
 #  SCORING MODELS
 
 FIRM_SCORE = 'firmScore'  # deprecated
@@ -116,13 +143,15 @@ EVE_PREDICTION = 'evePrediction'
 ESM_SCORE = 'bertScore'
 ESM3_SCORE = 'esm3Score'
 ESM_TYPE = 'esmMethod'
+ESM3_TYPE = 'esm3Method'
 AFM_SCORE = 'afmScore'
 EVE_TYPE = 'eveMethod'
 DS_RANK = 'DSRank'
 AVAILABLE_MODELS = {'EVE', 'ESM', 'AFM', 'ESM3', 'ESM1B', 'ESM1b'}
 AVAILABLE_SCORES = AVAILABLE_MODELS | {'DS'}
 MODELS_SCORES = {'EVE': EVE_SCORE, 'ESM': ESM_SCORE, 'ESM1B': ESM_SCORE, 'ESM1b': ESM_SCORE, 'ESM3': ESM3_SCORE,
-                 'AFM': AFM_SCORE, 'FIRM': FIRM_SCORE, 'EVE_METHOD': EVE_TYPE, 'ESM_METHOD': ESM_TYPE, 'DS': DS_RANK}
+                 'AFM': AFM_SCORE, 'FIRM': FIRM_SCORE, 'EVE_METHOD': EVE_TYPE, 'ESM_METHOD': ESM_TYPE, 'DS': DS_RANK,
+                 'ESM3_METHOD': ESM3_TYPE, 'ESM1b_METHOD': ESM_TYPE, 'ESM_METHOD1B': ESM_TYPE}
 NO_SCORE = -1.0
 NO_TYPE = 'no_score'
 
@@ -140,7 +169,7 @@ REMOVED_PROTEINS = ['LOC100996842', 'GLRA4', 'LOC390877', 'NM_001365196', 'LOC64
 MUTATION_REGEX = rf'p\.(?P<symbol>(?P<orig>[{A_A}]){{1}}(?P<location>[\d]+)(?P<change>[{A_A}]){{1}})'
 REF_SEQ_PADDING = 5
 NEW_MUTATION_DATA = {'chr': None, 'ref_na': None, 'alt_na': None, 'start': None, 'end': None, AFM_SCORE: NO_SCORE,
-                     EVE_SCORE: NO_SCORE, ESM_SCORE: None, ESM_TYPE: NO_TYPE, ESM3_SCORE: None,
+                     EVE_SCORE: NO_SCORE, ESM_SCORE: None, ESM_TYPE: NO_TYPE, ESM3_SCORE: None, ESM3_TYPE: NO_TYPE,
                      EVE_PREDICTION: NO_SCORE, EVE_TYPE: NO_TYPE, DS_RANK: None}
 #  PATIENTS AND FAMILY
 
@@ -204,6 +233,8 @@ CPT_TRUNCATE_TAIL = 7
 
 #  ESM-1b
 
+ESM1_AA = 'KRHEDNQTSCGAVLIMPYFW'
+ESM1B_MODEL = 'esm1b_t33_650M_UR50S'
 ESM_VARIANTS_DATA = 'https://huggingface.co/spaces/ntranoslab/esm_variants/resolve/main/ALL_hum_isoforms_ESM1b_LLR.zip'
 ESM_DATA = 'ESM_1b_variants'
 ESM_DATA_PATH = pjoin(ESM_PATH, ESM_DATA)
@@ -211,6 +242,18 @@ ESM_INDEX_PATH = pjoin(ESM_PATH, 'index.json')
 ESM_VARIANTS_PATH = pjoin(ESM_DATA_PATH, 'content', 'ALL_hum_isoforms_ESM1b_LLR')
 ESM_FILE_SUFFIX = '_LLR.csv'
 
+# ESM3
+
+ESM3_MODEL = 'esm3_sm_open_v1'
+ESM3_AA = 'LAGVSERTIDPKQNFYMHWC'
+ESM3_AA_EXTENDED = 'LAGVSERTIDPKQNFYMHWCXBUZO.-|'
+AA_ESM3_LOC = {aa: idx for idx, aa in enumerate(ESM3_AA)}
+ESM3_MAX_LENGTH = 1020
+
 #  DSRANK AND SUMMARY
-EVE_COL, EVE_TYPE_COL, ESM_COL, ESM_TYPE_COL, AFM_COL, DS_COL = "eve", "eve_type", "esm", "esm_type", "afm", "ds_rank"
+EVE_COL, EVE_TYPE_COL, ESM_COL, ESM_TYPE_COL, ESM3_COL, ESM3_TYPE_COL, AFM_COL, DS_COL = \
+    "eve", "eve_type", "esm1b", "esm1b_type", "esm3", "esm3_type", "afm", "ds_rank"
 PROT_COL, MUT_COL = 'protein', 'variant'
+COLUMNS_W_STATUS = [PROT_COL, MUT_COL, EVE_COL, EVE_TYPE_COL, ESM_COL, ESM_TYPE_COL, ESM3_COL, ESM3_TYPE_COL,
+                    AFM_COL, DS_COL]
+COLUMNS_NO_STATUS = [PROT_COL, MUT_COL, EVE_COL, ESM_COL, ESM3_COL, AFM_COL, DS_COL]

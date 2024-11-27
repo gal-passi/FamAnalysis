@@ -8,7 +8,7 @@ from multiprocessing import cpu_count
 from multiprocessing.pool import ThreadPool as Pool
 import tqdm
 from functools import partial
-from utils import print_if, adaptive_chunksize, afm_iterator, warn_if, summary_df
+from utils import print_if, adaptive_chunksize, afm_iterator, warn_if, summary_df, esm3_setup
 from definitions import *
 import glob
 from math import ceil
@@ -38,7 +38,8 @@ def create_parser():
     parser.add_argument(
         "--action",
         type=str,
-        choices=["init-DB", "update-DB", "delete-DB", "score-ESM", "score-EVE", "score-AFM", "rank-DS", "to-csv"],
+        choices=["init-DB", "update-DB", "delete-DB", "score-ESM", "score-ESM3",  "score-EVE", "score-AFM", "rank-DS",
+                 "to-csv"],
         default="init-DB",
         help="init-DB: initialize project database according to the supplied csv file\n"
              "score-[model]: calculate [model] scores for all missense variants in DB\n"
@@ -369,7 +370,7 @@ def calc_mutations_esm_scores(args, analyzer, recalc=False, iter_desc=''):
     total_tasks = len(tasks)
     for mutation in tqdm.tqdm(tasks, desc=iter_desc, total=len(tasks)):
         print_if(args.verbose, VERBOSE['thread_progress'], f"Calculating ESM1b scores for {mutation.long_name}")
-        score, score_type = analyzer.score_mutation_esm1b(mut=mutation, offset=args.offset)
+        score, score_type = analyzer.score_mutation_esm1b_precomputed(mut=mutation, offset=args.offset)
         if score is not None:
             successful += 1
             mutation.update_score('ESM', score, esm_type=score_type)
@@ -400,6 +401,25 @@ def calc_mutations_dsrank(n_scores_thr):
     df.loc[df['n_scores'] < n_scores_thr, DS_COL] = np.nan
     df.drop('n_scores', axis=1, inplace=True)
     return df
+
+
+def calc_mutations_esm3_scores(args, analyzer, recalc):
+    print_if(args.verbose, VERBOSE['program_progress'], f"Model inference performed on {DEVICE}")
+    token = args.token if args.token else HUGGINGFACE_TOKEN
+    assert token, 'must provide HuggingFace read permission token to use ESM3'
+    print('loading model...')
+    model, tokenizer = esm3_setup(model_name=ESM3_MODEL, token=token)
+    if recalc:
+        tasks = list(all_mutations())
+    else:
+        tasks = [mut for mut in all_mutations() if not mut.has_esm3]
+    total_tasks, successful = len(tasks), 0
+    for mutation in tqdm.tqdm(tasks, total=len(tasks)):
+        print_if(args.verbose, VERBOSE['thread_progress'], f"Calculating ESM3 scores for {mutation.long_name}")
+        score, log = analyzer.score_mutation_esm3(model=model, tokenizer=tokenizer, mut=mutation)
+        if score is not None:
+            successful += 1
+            mutation.update_score('ESM3', float(score), esm_type=log)
 
 
 def main(args):
@@ -440,7 +460,7 @@ def main(args):
             calc_mutations_esm_scores(args, analyzer, recalc=args.recalc)
         if action =='score-ESM3':
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating ESM-3 scores...")
-            calc_mutations_esm_scores(args, analyzer, recalc=args.recalc)
+            calc_mutations_esm3_scores(args, analyzer, recalc=args.recalc)
         if action == 'rank-DS':
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating Dataset Rank values...")
             return calc_mutations_dsrank(args.ds_thr)

@@ -114,10 +114,6 @@ class Protein:
         return ''
 
     @property
-    def interactions(self):
-        return Analyze.ProteinAnalyzer().interactions(self)
-
-    @property
     def aliases(self):
         return self._Uids['aliases']
 

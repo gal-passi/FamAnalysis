@@ -5,15 +5,17 @@ import warnings
 import numpy as np
 import Analyze
 import Protein as P
+from Connections import Uniport
 from definitions import *
 from utils import warn_if
-
+import json
 
 
 class Mutation:
     """
     This class stores all information about a given mutation
     """
+
     def __init__(self, full_desc, protein, dna_data={}, load_only=False, verbose_level=1):
         """
         :param full_desc: string must contain p.{AA}{location}{AA}
@@ -30,13 +32,13 @@ class Mutation:
         self._ref_sequences = None  # initialized only upon request
         self._manual_ref = None
         self._pdbs = None  # initialized only upon request
-        self._chr, self._start, self._end, self._orig_NA, self._change_NA  = 0, 0, 0, None, None
+        self._chr, self._start, self._end, self._orig_NA, self._change_NA = 0, 0, 0, None, None
         self._interface = {}
         self._v = verbose_level
         if not protein or not full_desc:
             raise ValueError("Usage: Mutation(full_desc, protein_name)")
 
-        protein = P.Protein(ref_name = protein, load_only=load_only) if isinstance(protein, str) else protein
+        protein = P.Protein(ref_name=protein, load_only=load_only) if isinstance(protein, str) else protein
         self._directory = os.path.join(MUTATION_PATH, f"{protein.name}_{self.extract_name(full_desc)}.txt")
         if not os.path.exists(self._directory):
             if load_only: raise NameError("Couldn't find mutation in load only mode")
@@ -91,9 +93,10 @@ class Mutation:
                 self._chr, self._start, self._end, self._orig_NA, self._change_NA = \
                     data['chr'], data['start'], data['end'], data['ref_na'], data['alt_na']
             except KeyError:
-               warn_if(self._v, VERBOSE['thread_warnings'], "Incomplete data supplied: data should contain the keys: chr, start, end\n"
-                              "the following properties were set to -1: chr, start, end")
-               self._chr, self._start, self._end = -1, -1, -1
+                warn_if(self._v, VERBOSE['thread_warnings'],
+                        "Incomplete data supplied: data should contain the keys: chr, start, end\n"
+                        "the following properties were set to -1: chr, start, end")
+                self._chr, self._start, self._end = -1, -1, -1
 
         self._protein = protein
         self._save_obj(self._directory)
@@ -111,13 +114,13 @@ class Mutation:
         with open(path, 'rb') as file:
             if os.path.getsize(path) > 0:
                 data = pickle.load(file)
-                self._symbol, self._orig, self._change, self._loc, self._full_desc,  = \
+                self._symbol, self._orig, self._change, self._loc, self._full_desc, = \
                     data['name'], data['orig'], data['change'], data['location'], data['full_desc']
                 self._interface = data['interface']
                 # TODO give optional load for missing data
-                self._chr, self._start, self._end, self._orig_NA, self._change_NA  = \
+                self._chr, self._start, self._end, self._orig_NA, self._change_NA = \
                     data['chr'], data['start'], data['end'], data['orig_NA'], data['change_NA']
-                self._protein = P.Protein(ref_name = data['protein'])
+                self._protein = P.Protein(ref_name=data['protein'])
                 if 'manual_ref' in data.keys():  # TODO this is a temporal fix as not all mut objects have this attribute
                     self._manual_ref = data['manual_ref']
             else:
@@ -202,7 +205,7 @@ class Mutation:
         :param n: the new references will be of length 2n
         :return:
         """
-        self._ref_sequences = {'manual':  seq}
+        self._ref_sequences = {'manual': seq}
 
     @property
     def pdbs(self):
@@ -229,12 +232,14 @@ class Mutation:
 
     @property
     def interface(self):
-        if self._interface: return self._interface
-        else: return -1
-        #TODO fix should not calculate by default
-        #if not self.raw_pdbs: return {}
-        #self._interface = self.calc_interface()
-        #return self._interface
+        if self._interface:
+            return self._interface
+        else:
+            return -1
+        # TODO fix should not calculate by default
+        # if not self.raw_pdbs: return {}
+        # self._interface = self.calc_interface()
+        # return self._interface
 
     @property
     def chr(self):
@@ -270,9 +275,45 @@ class Mutation:
             return set(isoforms)
         return set()
 
+    def augment_isoforms(self):
+        """
+        same as isoforms but if not found will expand the search
+        to alias uniprot ids. If found isoform will be saved to protein isoforms
+        """
+        isoforms = self.isoforms
+        if isoforms:
+            return isoforms
+        else:
+            isoform = Uniport().expand_isoforms(prot=self.protein, reviewed=True, ref_mut=self)
+            if isoform:  # update protein
+                iso, seq = isoform
+                prot_isoforms = self._protein.isoforms
+                prot_isoforms[iso] = seq
+                with open(os.path.join(self.protein.directory, self.protein.ISOFORMS), "w") as file:
+                    file.write(json.dumps(prot_isoforms))
+                return iso
+        return set()
+
+    def sequence(self, how='min'):
+        """
+        returns a full protein sequence matching protein mutation location
+        :param how: min | max | all - return minimal length sequence, maximal length sequence or all sequences
+        """
+        assert how in ['min', 'max', 'all'], 'how could only take min | max | all'
+        sequences = [self.protein.isoforms[iso] for iso in self.isoforms]
+        if not sequences:
+            return ''
+        if how == 'all':
+            return sequences
+        sequences.sort(key=len)
+        if how == 'min':
+            return sequences[0]
+        elif how == 'max':
+            return sequences[-1]
+
     @property
     def for_bert_location(self, offset=1):
-        return self.origAA + str(self.loc-offset) + self.changeAA
+        return self.origAA + str(self.loc - offset) + self.changeAA
 
     @property
     def esm_score(self):
@@ -282,7 +323,18 @@ class Mutation:
         try:
             return self._protein.muts[self.extended_description][MODELS_SCORES['ESM']]
         except KeyError:
-            warn_if(self._v, VERBOSE['thread_warnings'], f"eveScore not initialized for mutation - try to add mutation again")
+            warn_if(self._v, VERBOSE['thread_warnings'],
+                    f"eveScore not initialized for mutation - try to add mutation again")
+            warn_if(self._v, VERBOSE['raw_warnings'], f"\n{self._protein.muts}")
+            return None
+
+    @property
+    def esm3_score(self):
+        try:
+            return self._protein.muts[self.extended_description][MODELS_SCORES['ESM3']]
+        except KeyError:
+            warn_if(self._v, VERBOSE['thread_warnings'],
+                    f"eveScore not initialized for mutation - try to add mutation again")
             warn_if(self._v, VERBOSE['raw_warnings'], f"\n{self._protein.muts}")
             return None
 
@@ -291,11 +343,16 @@ class Mutation:
         return self.esm_score is not None
 
     @property
+    def has_esm3(self):
+        return self.esm3_score is not None
+
+    @property
     def eve_score(self):
         try:
             return self._protein.muts[self.extended_description][MODELS_SCORES['EVE']]
         except KeyError:
-            warn_if(self._v, VERBOSE['thread_warnings'], f"eveScore not initialized for mutation - try to add mutation again")
+            warn_if(self._v, VERBOSE['thread_warnings'],
+                    f"eveScore not initialized for mutation - try to add mutation again")
             warn_if(self._v, VERBOSE['raw_warnings'], f"\n{self._protein.muts}")
             return -1
 
@@ -322,6 +379,13 @@ class Mutation:
     @property
     def esm_type(self):
         return self._protein.muts[self.extended_description][ESM_TYPE]
+
+    @property
+    def esm3_type(self):
+        if MODELS_SCORES['ESM3_METHOD'] in self._protein.muts[self.extended_description]:
+            return self._protein.muts[self.extended_description][MODELS_SCORES['ESM3_METHOD']]
+        else:
+            return ''
 
     @property
     def firm_score(self):
@@ -375,7 +439,7 @@ class Mutation:
                 if seq[search_loc] == self._orig:
                     ref = seq[start: search_loc + padding]
                     # sequences in edges may be too short
-                    if len(ref) == padding*2:
+                    if len(ref) == padding * 2:
                         found.add(ref)
                     references["Unknown_iso"] = ref
             except IndexError:
@@ -385,7 +449,7 @@ class Mutation:
             try:
                 if seq[search_loc] == self._orig:
                     ref = seq[start: search_loc + padding]
-                    if (ref not in found) and (len(ref) == padding*2):
+                    if (ref not in found) and (len(ref) == padding * 2):
                         found.add(ref)
                         references[iso] = ref
             except IndexError:
@@ -410,7 +474,8 @@ class Mutation:
         :param reference_sequence: AA sequence
         :return: list of relevent pdb-ids
         """
-        return [(p_id, seq.find(reference_sequence) + 5) for p_id, seq in self._protein.pdbs.items() if (reference_sequence in seq) and (p_id != 'manual')]
+        return [(p_id, seq.find(reference_sequence) + 5) for p_id, seq in self._protein.pdbs.items() if
+                (reference_sequence in seq) and (p_id != 'manual')]
 
     def has_pdbs(self):
         for key, value in self.pdbs.items():
@@ -462,6 +527,8 @@ class Mutation:
             prot.muts[self.extended_description][MODELS_SCORES['EVE_METHOD']] = eve_type
         if model == 'ESM' and esm_type:
             prot.muts[self.extended_description][MODELS_SCORES['ESM_METHOD']] = esm_type
+        if model == 'ESM3' and esm_type:
+            prot.muts[self.extended_description][MODELS_SCORES['ESM3_METHOD']] = esm_type
         prot._update_DB(pjoin(prot.directory, prot.MUTS), prot.muts, mode='pickle')
 
     def esm_scores_from_inference(self, how='all'):
@@ -480,7 +547,7 @@ class Mutation:
         if how == 'sum':
             return sum(scores)
         if how == 'avg':
-            return sum(scores)/float(len(scores))
+            return sum(scores) / float(len(scores))
         if how == 'min':
             return min(scores)
         if how == 'max':
@@ -499,10 +566,11 @@ class Mutation:
         :return: list of scores eve, esm, afm in csv format None will be rep;ace with 0 or -1
         """
         esm_score = self.esm_score if self.esm_score is not None else 0
+        esm3_score = self.esm3_score if self.esm3_score is not None else 0
         afm_score = self.afm_score if self.afm_score is not None else 0
         ds_rank = self.ds_rank if self.ds_rank is not None else -1
         if include_status:
             return [self.protein_name, self.name, self.eve_score, self.eve_type, esm_score,
-                    self.esm_type, afm_score, ds_rank]
+                    self.esm_type, esm3_score, self.esm3_type, afm_score, ds_rank]
         else:
-            return [self.protein_name, self.name, self.eve_score, esm_score, afm_score, ds_rank]
+            return [self.protein_name, self.name, self.eve_score, esm_score, esm3_score, afm_score, ds_rank]

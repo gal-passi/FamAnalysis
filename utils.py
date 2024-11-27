@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import warnings
 import requests
+import torch.nn
 from requests.adapters import HTTPAdapter, Retry
 from definitions import *
 import sys
@@ -14,6 +15,12 @@ import click
 import re
 import tempfile
 from Bio import SeqIO
+from esm.models.esm3 import ESM3
+from esm.pretrained import ESM3_sm_open_v0
+from esm.sdk.api import ESM3InferenceClient
+from esm.tokenization.sequence_tokenizer import EsmSequenceTokenizer
+from huggingface_hub import login
+
 
 
 def print_if(verbose: object, thr: object, text: object) -> object:
@@ -111,6 +118,14 @@ def safe_post_request(session, url, timeout, verbose_level, warning_msg='connect
         return return_on_failure
     return r
 
+def read_and_check_response(resp, query):
+    if not resp:
+        raise ConnectionError(f'querry: {query} --> Failed')
+    if not resp.ok:
+        raise ConnectionError(f'querry: {query} --> Failed with code {resp.status_code}')
+    return resp.text
+
+
 def remove_whitespaces(text):
     """
     removes all whitespaces from string
@@ -139,11 +154,26 @@ def process_pdb_ids_query(text):
         ids += row.split('\t')[-1].split(';')[:-1]
     return ids
 
+
 def make_fasta(path, name, seq):
     full_path = os.path.join(path, f"{name}.fasta")
     with open(full_path, "w+") as file:
         file.write(f">{name}\n")
         file.write(f"{seq}\n")
+
+
+def na_to_aa_translator(na_seq):
+    assert len(na_seq) % 3 == 0, 'na seq must be a multiple of 3'
+    aa_seq = ''
+    for idx in range(0, len(na_seq), 3):
+        codon = na_seq[idx: idx + CODON_LENGTH].lower()
+        if codon in STOP_CODONS:
+            print(f'stop codon at {idx} out of {len(na_seq)} --> {codon}')
+            break
+        aa_seq += CODON_TRANSLATOR[codon]
+    print(f'na_length: {len(na_seq) // 3} \t aa_length: {len(aa_seq)}')
+    assert (len(na_seq) // 3) - 1 == len(aa_seq), 'na seq and aa seq length do not match - check for early stop codon'
+    return aa_seq
 
 
 def adaptive_chunksize(rowsize, ram_usage=0.5):
@@ -219,6 +249,7 @@ def sequence_from_cpt_df(cpt_data):
 def protein_exists(ref_name):
     return ref_name in set(os.listdir('DB/proteins'))
 
+
 def seacrh_by_ref_seq(main_seq, ref_seq, padding=REF_SEQ_PADDING):
     """
     :return: index of start row of wt AA
@@ -230,16 +261,84 @@ def seacrh_by_ref_seq(main_seq, ref_seq, padding=REF_SEQ_PADDING):
     start_row_idx = aa_location * 20
     return start_row_idx
 
+
 def summary_df(include_status=False):
     """
     :param include_status: bool include esm and eve score type
     :return: DataFrame template for summary
     """
     if include_status:
-        return pd.DataFrame(columns=[PROT_COL, MUT_COL, EVE_COL, EVE_TYPE_COL, ESM_COL, ESM_TYPE_COL, AFM_COL, DS_COL])
+        return pd.DataFrame(columns=COLUMNS_W_STATUS)
     else:
-        return pd.DataFrame(columns=[PROT_COL, MUT_COL, EVE_COL, ESM_COL, AFM_COL, DS_COL])
+        return pd.DataFrame(columns=COLUMNS_NO_STATUS)
 
+def esm_setup(model_name=ESM1B_MODEL):
+    """
+    :param model_name: str model name
+    :return: model, alphabet api
+    """
+    model, alphabet = torch.hub.load("facebookresearch/esm:main", model_name)
+    model = model.to(DEVICE)
+    print(f"model loaded on {DEVICE}")
+    return model, alphabet
+
+def esm3_setup(model_name=ESM3_MODEL, token=HUGGINGFACE_TOKEN):
+    """
+    :param model_name: str model name
+    :param token: huggingface login token
+    :return: ESM3_model, ESM_tokenizer
+    """
+    login(token)
+    model: ESM3InferenceClient = ESM3.from_pretrained(model_name).to(DEVICE)
+    if DEVICE == 'cuda':
+        model = model.float()
+    print(f"model loaded on {DEVICE}")
+    tokenizer = EsmSequenceTokenizer()
+    return model, tokenizer
+
+def esm3_seq_logits(model, tokens, log=True, softmax=True, return_device='cpu'):
+    """
+    :param model: ESM3 initiated model
+    :param tokens: tokenized sequence
+    :param log: bool return log of logits
+    :param softmax: bool return softmax of logits
+    :param return_device: 'cpu' | 'cuda should logits be returned on cpu or cuda
+    :return: numpy array - log_s
+    """
+    assert tokens.device == model.device, 'tokens and model must be on the same device'
+    if return_device == 'cuda':
+        assert return_device == DEVICE, 'return type cuda but no GPU detected'
+    model.eval()
+    with torch.no_grad():
+        output = model.forward(sequence_tokens=tokens)
+        sequence_logits = output.sequence_logits
+        aa_logits = sequence_logits[0, 1:-1, 4:24]
+        if log and softmax:
+            token_probs = torch.log_softmax(aa_logits, dim=-1)
+        elif log:
+            token_probs = torch.log(aa_logits)
+        elif softmax:
+            token_probs = torch.softmax(aa_logits, dim=-1)
+        token_probs = token_probs.cpu().numpy()
+        return token_probs
+
+
+def esm3_process_long_sequences(seq, loc):
+    """
+    trims seq to len < 1024 using mut Object. to fit for bert model
+    :return: offset from orig location, trimmed sequence
+    """
+    thr = ESM3_MAX_LENGTH // 2
+    left_bound = 0 if loc-thr < 0 else loc - thr
+    right_bound = len(seq) if loc + thr >len(seq) else loc+thr
+    left_excess = 0 if loc - thr > 0 else abs(loc-thr)
+    right_excess = 0 if loc + thr <= len(seq) else loc+thr-len(seq)
+    if (left_excess == 0) and (right_excess == 0):
+        return left_bound, seq[left_bound:right_bound]
+    if left_excess > 0:
+        return 0, seq[left_bound:right_bound+left_excess]
+    if right_excess > 0:
+        return left_bound-right_excess, seq[left_bound-right_excess:right_bound]
 
 def create_patient_data(data, patient, columns, empty=None):
     """

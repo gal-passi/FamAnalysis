@@ -1,9 +1,11 @@
 import glob
+import re
+import tempfile
 from Bio import Entrez, PDB
 from urllib.error import HTTPError as HTTPError
 from definitions import *
 from utils import print_if, warn_if, create_session, safe_post_request, safe_get_request
-from utils import progress_bar, process_fastas, read_in_chunks, process_pdb_ids_query
+from utils import progress_bar, process_fastas, read_in_chunks, process_pdb_ids_query, read_and_check_response
 import wget
 from os.path import basename
 
@@ -18,7 +20,7 @@ class Uniport:
         self._v = verbose_level
         self.pdpl = PDB.PDBList()
 
-    def fetch_uniport_sequences(self, uid, ):
+    def fetch_uniport_sequences(self, uid):
         """
         Retrieve all known isoforms from uniport
         :param uid: Uniport id only primary name
@@ -36,36 +38,30 @@ class Uniport:
             return {}
         return process_fastas(response.text)
 
-    def expend_isoforms(self, prot, limit=20, unique_key=''):
+    def expand_isoforms(self, prot, limit=20, reviewed=True, ref_mut=None):
         """
-        will add all known isoforms of prot.name including non-reviewed
-        will be returned in form {uid_iso:...}
-        this will noe override the default protein isoforms
+        expand protein isoforms using all relevant Uniprot accession
+        this will not override the default protein isoforms
         :param prot: protein obj
         :param limit: max number of uids to quary
-        :param unique_key: str added to search problematic proteins
+        :param reviewed: bool should unreviewed ids be used
+        :param ref_mut: Mutation obj if given will search for isoform with the given mutation
         :return: {uid_iso_index: seq}
         """
         isoforms = {}
-        if not unique_key:
-            query = UNIPORT_QUERY_URL + Q_ISOFORMS_PROT.format(prot.name)
-        else:
-            query = UNIPORT_QUERY_URL + Q_ISOFORMS_KEY.format(unique_key)
-
-        s = create_session(DEFAULT_HEADER, RETRIES, WAIT_TIME, RETRY_STATUS_LIST)
-        r = safe_get_request(s, query, TIMEOUT, self._v, CON_ERR_EI.format(prot.name))
-        if not r:
-            return {}
-        if r.text == '':
-            return {}
-        uids = r.text.split("\n")
-        print_if(self._v, VERBOSE['thread_progress'], f"found {len(uids) - 2} uids")
-        for uid in r.text.split("\n")[1:limit + 1]:
-            if uid == '':
-                return isoforms
-            res = self.fetch_uniport_sequences(uid, expend=True)
+        uids = prot.all_uids()['reviewed'] if reviewed else prot.all_uids()['all_enteries']
+        if ref_mut:
+            idx, wt = ref_mut.loc - 1, ref_mut.origAA
+        for uid in uids:
+            res = self.fetch_uniport_sequences(uid)
+            if ref_mut:
+                for iso, seq in res.items():
+                    if idx >= len(seq):
+                        continue
+                    if seq[idx] == wt:
+                        return iso, seq
             isoforms = {**isoforms, **res}
-        return isoforms
+        return isoforms if not ref_mut else {}
 
     def fetch_pdbs(self, uids=None, prot=None, reviewed=True):
         """
@@ -252,6 +248,58 @@ class Uniport:
             return False
         else:
             return False
+
+class EntrezApi:
+    """Api for Entrez"""
+    def __init__(self, verbose_level=1):
+        self.api = create_session(ENTREZ_API_URL, retries=RETRIES, wait_time=WAIT_TIME,
+                                  status_forcelist=RETRY_STATUS_LIST)
+        self._v = verbose_level
+
+    def _obtain_keys(self, id):
+        """
+        :param database: str: NM_*
+        :return: (web_env, query_key)
+        """
+        keys_query = ENTREZ_SEARCH_URL.format(id)
+        keys_resp = safe_get_request(self.api, keys_query, timeout=TIMEOUT, verbose_level=self._v)
+        keys_resp = read_and_check_response(keys_resp, keys_query)
+        if not keys_resp:
+            return None
+        web_env, query_key = re.search(ENTREZ_WEBENV_RE, keys_resp), re.search(ENTREZ_QUERYKEY_RE, keys_resp)
+        if not web_env or not query_key:
+            return None
+        return web_env.groups()[0], query_key.groups()[0]
+
+    def _seq_from_keys(self, id, web_env, query_key, seq_type='aa'):
+        """
+        obtain nucleic acids sequence of id using web_env and query_env variables
+        """
+        assert seq_type in ['aa', 'na'], 'seq_type must be one of: aa | na'
+        ret_type = ENTREZ_AA_RET if seq_type == 'aa' else ENTREZ_NA_RET
+        query = ENTREZ_SEQ_FROM_KEYS.format(query_key, web_env, ret_type)
+        seq_resp = safe_get_request(self.api, query, timeout=TIMEOUT, verbose_level=self._v)
+        seq_resp = read_and_check_response(seq_resp, query)
+        if not seq_resp:
+            return None
+        seq = ''.join(seq_resp.split('\n')[1:-1])
+        if not seq:
+            return None
+        return {id: seq}
+
+
+    def obtain_seq(self, entrez_id, seq_type='aa'):
+        """
+        :param entrez_id: str entrez id
+        :param seq_type: str in na | aa
+        :return: str sequence
+        """
+        assert seq_type in ['aa', 'na'], 'seq_type must be one of: aa | na'
+        keys = self._obtain_keys(id=entrez_id)
+        if keys is None:
+            return None
+        web_env, query_key = keys
+        return self._seq_from_keys(id=entrez_id, web_env=web_env, query_key=query_key, seq_type=seq_type)
 
 
 # will be deprecated
