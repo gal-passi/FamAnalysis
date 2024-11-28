@@ -10,7 +10,7 @@ hash_url = lambda url: sha256(url).hexdigest()
 
 CONTACT = ""
 HEADERS = {'User-Agent': 'Python {}'.format(CONTACT)}
-HUGGINGFACE_TOKEN = ""  # obtain read permission token
+HUGGINGFACE_TOKEN = "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"  # obtain read permission token
 
 #  DEVICE
 
@@ -27,9 +27,9 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 ROOT_DIR = dirname(abspath(__file__))
 DB = 'DB'
 DB_PATH = pjoin(ROOT_DIR, DB)
-PROTEINS = 'proteins'
+PROTEINS = 'proteins_30_fams'
 PROTEIN_PATH = pjoin(DB_PATH, PROTEINS)
-MUTATIONS = 'mutations'
+MUTATIONS = 'mutations_30_fams'
 MUTATION_PATH = pjoin(DB_PATH, MUTATIONS)
 AFM_PATH = pjoin(DB_PATH, 'AFM')
 EVE_PATH = pjoin(DB_PATH, 'EVE')

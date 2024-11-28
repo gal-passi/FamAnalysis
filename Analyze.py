@@ -356,7 +356,19 @@ class ProteinAnalyzer:
         return None, 'failed'
 
     @staticmethod
-    def score_mutation_esm3(model, tokenizer, mut, method='masked_marginals', offset=1, log='', ):
+    def score_mutation_esm_inference(model, alphabet, mut, method='masked_marginals', offset=1, log=''):
+        """
+        :param model: esm initiated model
+        :param alphabet: alphabet api
+        :param mut: Mutation object
+        :param offset: int offset to mutation index
+        :param log: str
+        :param method: scoring method str: wt_marginals | mutant_marginals | masked_marginals
+        :return: tuple (float | None ESM3 masked marginal, str log)
+        """
+
+    @staticmethod
+    def score_mutation_esm3(model, tokenizer, mut, method='masked_marginals', offset=1, log=''):
         """
         :param model: ESM3 initiated model
         :param tokenizer: ESM3 sequence tokenizer
