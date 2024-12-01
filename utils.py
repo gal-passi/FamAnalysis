@@ -3,6 +3,7 @@ from pathlib import Path
 import warnings
 import requests
 import torch.nn
+import torch.nn
 from requests.adapters import HTTPAdapter, Retry
 from definitions import *
 import sys
@@ -117,6 +118,7 @@ def safe_post_request(session, url, timeout, verbose_level, warning_msg='connect
         warn_if(verbose_level, raw_err_thr, f"{e}")
         return return_on_failure
     return r
+
 
 def read_and_check_response(resp, query):
     if not resp:
@@ -296,7 +298,7 @@ def esm3_setup(model_name=ESM3_MODEL, token=HUGGINGFACE_TOKEN):
     tokenizer = EsmSequenceTokenizer()
     return model, tokenizer
 
-def esm3_seq_logits(model, tokens, log=True, softmax=True, return_device='cpu'):
+def esm_seq_logits(model, tokens, log=True, softmax=True, return_device='cpu', esm_version=3):
     """
     :param model: ESM3 initiated model
     :param tokens: tokenized sequence
@@ -310,8 +312,12 @@ def esm3_seq_logits(model, tokens, log=True, softmax=True, return_device='cpu'):
         assert return_device == DEVICE, 'return type cuda but no GPU detected'
     model.eval()
     with torch.no_grad():
-        output = model.forward(sequence_tokens=tokens)
-        sequence_logits = output.sequence_logits
+        if esm_version == 3:
+            output = model.forward(sequence_tokens=tokens)
+            sequence_logits = output.sequence_logits
+        else:  #  esm 1,2
+            logits = model(tokens, repr_layers=REP_LAYERS, return_contacts=False)['logits']
+            sequence_logits = logits[0, 1:-1, 4:24]
         aa_logits = sequence_logits[0, 1:-1, 4:24]
         if log and softmax:
             token_probs = torch.log_softmax(aa_logits, dim=-1)
@@ -323,12 +329,12 @@ def esm3_seq_logits(model, tokens, log=True, softmax=True, return_device='cpu'):
         return token_probs
 
 
-def esm3_process_long_sequences(seq, loc):
+def esm_process_long_sequences(seq, loc):
     """
     trims seq to len < 1024 using mut Object. to fit for bert model
     :return: offset from orig location, trimmed sequence
     """
-    thr = ESM3_MAX_LENGTH // 2
+    thr = ESM_MAX_LENGTH // 2
     left_bound = 0 if loc-thr < 0 else loc - thr
     right_bound = len(seq) if loc + thr >len(seq) else loc+thr
     left_excess = 0 if loc - thr > 0 else abs(loc-thr)

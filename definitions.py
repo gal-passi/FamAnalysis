@@ -10,7 +10,7 @@ hash_url = lambda url: sha256(url).hexdigest()
 
 CONTACT = ""
 HEADERS = {'User-Agent': 'Python {}'.format(CONTACT)}
-HUGGINGFACE_TOKEN = "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"  # obtain read permission token
+HUGGINGFACE_TOKEN = ""  # obtain read permission token
 
 #  DEVICE
 
@@ -27,9 +27,9 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 ROOT_DIR = dirname(abspath(__file__))
 DB = 'DB'
 DB_PATH = pjoin(ROOT_DIR, DB)
-PROTEINS = 'proteins_30_fams'
+PROTEINS = 'proteins'
 PROTEIN_PATH = pjoin(DB_PATH, PROTEINS)
-MUTATIONS = 'mutations_30_fams'
+MUTATIONS = 'mutations'
 MUTATION_PATH = pjoin(DB_PATH, MUTATIONS)
 AFM_PATH = pjoin(DB_PATH, 'AFM')
 EVE_PATH = pjoin(DB_PATH, 'EVE')
@@ -233,7 +233,7 @@ CPT_TRUNCATE_TAIL = 7
 
 #  ESM-1b
 
-ESM1_AA = 'KRHEDNQTSCGAVLIMPYFW'
+#ESM1_AA = 'KRHEDNQTSCGAVLIMPYFW'
 ESM1B_MODEL = 'esm1b_t33_650M_UR50S'
 ESM_VARIANTS_DATA = 'https://huggingface.co/spaces/ntranoslab/esm_variants/resolve/main/ALL_hum_isoforms_ESM1b_LLR.zip'
 ESM_DATA = 'ESM_1b_variants'
@@ -241,14 +241,16 @@ ESM_DATA_PATH = pjoin(ESM_PATH, ESM_DATA)
 ESM_INDEX_PATH = pjoin(ESM_PATH, 'index.json')
 ESM_VARIANTS_PATH = pjoin(ESM_DATA_PATH, 'content', 'ALL_hum_isoforms_ESM1b_LLR')
 ESM_FILE_SUFFIX = '_LLR.csv'
+MASK_TOKEN = '<mask>'
+REP_LAYERS = [33]
 
 # ESM3
 
 ESM3_MODEL = 'esm3_sm_open_v1'
-ESM3_AA = 'LAGVSERTIDPKQNFYMHWC'
-ESM3_AA_EXTENDED = 'LAGVSERTIDPKQNFYMHWCXBUZO.-|'
-AA_ESM3_LOC = {aa: idx for idx, aa in enumerate(ESM3_AA)}
-ESM3_MAX_LENGTH = 1020
+ESM_AA_ORDER = 'LAGVSERTIDPKQNFYMHWC'
+ESM_AA_EXTENDED = 'LAGVSERTIDPKQNFYMHWCXBUZO.-|'
+AA_ESM_LOC = {aa: idx for idx, aa in enumerate(ESM_AA_ORDER)}
+ESM_MAX_LENGTH = 1020
 
 #  DSRANK AND SUMMARY
 EVE_COL, EVE_TYPE_COL, ESM_COL, ESM_TYPE_COL, ESM3_COL, ESM3_TYPE_COL, AFM_COL, DS_COL = \

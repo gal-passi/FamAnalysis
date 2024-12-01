@@ -9,7 +9,7 @@ import glob
 import pandas as pd
 import pickle
 from utils import afm_range_read, name_for_esm, sequence_from_esm_df, name_for_cpt, \
-    sequence_from_cpt_df, seacrh_by_ref_seq, warn_if, esm3_seq_logits, esm3_process_long_sequences
+    sequence_from_cpt_df, seacrh_by_ref_seq, warn_if, esm_seq_logits, esm_process_long_sequences
 import Connections
 from definitions import *
 
@@ -366,6 +366,29 @@ class ProteinAnalyzer:
         :param method: scoring method str: wt_marginals | mutant_marginals | masked_marginals
         :return: tuple (float | None ESM3 masked marginal, str log)
         """
+        if not mut.isoforms:
+            return None, log + '\tno_iso'
+        mut_idx = mut.loc - offset
+        log = log + '\toriginal_sequence'
+        sequence = mut.sequence(how='min')
+        if len(sequence) > ESM_MAX_LENGTH:
+            new_offset, sequence = esm_process_long_sequences(sequence, mut_idx)
+            mut_idx = mut_idx - new_offset
+            log = log + '\ttrimmed_sequence'
+        #  mask sequence
+        assert sequence[mut_idx] == mut.origAA, 'sequence does not match wild-type AA - check offset'
+        if method == 'mutant_marginals':
+            input_seq = sequence[:mut_idx] + mut.changeAA + sequence[mut_idx + 1:]
+        elif method == 'masked_marginals':
+            input_seq = sequence[:mut_idx] + MASK_TOKEN + sequence[mut_idx + 1:]
+        tokenizer = alphabet.get_batch_converter()
+        tokenized = tokenizer(input_seq)['input_ids']
+        tokens = torch.tensor(tokenized, dtype=torch.int64).unsqueeze(0).to(DEVICE)
+        _, _, batch_tokens = tokenizer(input=[(mut.long_name, input_seq)])
+        logits = esm_seq_logits(model=model, tokens=tokens, log=True, softmax=True, return_device='cpu', esm_version=1)
+        # use masked marginals score
+        return logits[mut_idx][AA_ESM_LOC[mut.changeAA]] - logits[mut_idx][AA_ESM_LOC[mut.origAA]], log
+
 
     @staticmethod
     def score_mutation_esm3(model, tokenizer, mut, method='masked_marginals', offset=1, log=''):
@@ -384,8 +407,8 @@ class ProteinAnalyzer:
         log = log+'\toriginal_sequence'
         #  choose sequence of minimal length
         sequence = mut.sequence(how='min')
-        if len(sequence) > ESM3_MAX_LENGTH:
-            new_offset, sequence = esm3_process_long_sequences(sequence, mut_idx)
+        if len(sequence) > ESM_MAX_LENGTH:
+            new_offset, sequence = esm_process_long_sequences(sequence, mut_idx)
             mut_idx = mut_idx - new_offset
             log = log+'\ttrimmed_sequence'
         #  mask sequence
@@ -399,9 +422,9 @@ class ProteinAnalyzer:
         tokenized = tokenizer(input_seq)['input_ids']
         tokens = torch.tensor(tokenized, dtype=torch.int64).unsqueeze(0).to(DEVICE)
         print(f"calculating score {mut.long_name}")
-        logits = esm3_seq_logits(model=model, tokens=tokens, log=True, softmax=True, return_device='cpu')
+        logits = esm_seq_logits(model=model, tokens=tokens, log=True, softmax=True, return_device='cpu')
         # use masked marginals score
-        return logits[mut_idx][AA_ESM3_LOC[mut.changeAA]] - logits[mut_idx][AA_ESM3_LOC[mut.origAA]], log
+        return logits[mut_idx][AA_ESM_LOC[mut.changeAA]] - logits[mut_idx][AA_ESM_LOC[mut.origAA]], log
 
     @staticmethod
     def _esm_interperter(mut, search_name, offset, use_ref_seq=False):
