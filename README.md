@@ -33,7 +33,7 @@ FamAnalysis requires python 3.10
 
 After cloning the project, run:
 
-`pip install pandas requests tqdm psutil click wget bio torch esm` 
+`pip install pandas requests tqdm psutil click wget bio torch fair-esm` 
 
 `python setup.py`
 
