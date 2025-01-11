@@ -3,7 +3,6 @@ from pathlib import Path
 import warnings
 import requests
 import torch.nn
-import torch.nn
 from requests.adapters import HTTPAdapter, Retry
 from definitions import *
 import sys
@@ -16,11 +15,11 @@ import click
 import re
 import tempfile
 from Bio import SeqIO
-from esm.models.esm3 import ESM3
-from esm.pretrained import ESM3_sm_open_v0
-from esm.sdk.api import ESM3InferenceClient
-from esm.tokenization.sequence_tokenizer import EsmSequenceTokenizer
-from huggingface_hub import login
+#from esm.models.esm3 import ESM3
+#from esm.pretrained import ESM3_sm_open_v0
+#from esm.sdk.api import ESM3InferenceClient
+#from esm.tokenization.sequence_tokenizer import EsmSequenceTokenizer
+#from huggingface_hub import login
 
 
 
@@ -279,7 +278,9 @@ def esm_setup(model_name=ESM1B_MODEL):
     :param model_name: str model name
     :return: model, alphabet api
     """
-    model, alphabet = torch.hub.load("facebookresearch/esm:main", model_name)
+    print(model_name)
+    #model, alphabet = torch.hub.load("facebookresearch/esm:main", 'esm1b_t33_650M_UR50S', source="github", force_reload=True)
+    model, alphabet = torch.hub.load("facebookresearch/esm:main", 'esm1b_t33_650M_UR50S')
     model = model.to(DEVICE)
     print(f"model loaded on {DEVICE}")
     return model, alphabet
@@ -307,17 +308,18 @@ def esm_seq_logits(model, tokens, log=True, softmax=True, return_device='cpu', e
     :param return_device: 'cpu' | 'cuda should logits be returned on cpu or cuda
     :return: numpy array - log_s
     """
-    assert tokens.device == model.device, 'tokens and model must be on the same device'
+
     if return_device == 'cuda':
         assert return_device == DEVICE, 'return type cuda but no GPU detected'
     model.eval()
     with torch.no_grad():
         if esm_version == 3:
+            assert tokens.device == model.device, 'tokens and model must be on the same device'
             output = model.forward(sequence_tokens=tokens)
             sequence_logits = output.sequence_logits
         else:  #  esm 1,2
-            logits = model(tokens, repr_layers=REP_LAYERS, return_contacts=False)['logits']
-            sequence_logits = logits[0, 1:-1, 4:24]
+            assert tokens.device == next(model.parameters()).device, 'tokens and model must be on the same device'
+            sequence_logits = model(tokens, repr_layers=REP_LAYERS, return_contacts=False)['logits']
         aa_logits = sequence_logits[0, 1:-1, 4:24]
         if log and softmax:
             token_probs = torch.log_softmax(aa_logits, dim=-1)

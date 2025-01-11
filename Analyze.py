@@ -356,7 +356,7 @@ class ProteinAnalyzer:
         return None, 'failed'
 
     @staticmethod
-    def score_mutation_esm_inference(model, alphabet, mut, method='masked_marginals', offset=1, log=''):
+    def score_mutation_esm_inference(model, alphabet, mut, method='masked_marginals', offset=1, log='inference'):
         """
         :param model: esm initiated model
         :param alphabet: alphabet api
@@ -368,6 +368,8 @@ class ProteinAnalyzer:
         """
         if not mut.isoforms:
             return None, log + '\tno_iso'
+        if mut.changeAA == 'X':  # invalid change
+            return None, None
         mut_idx = mut.loc - offset
         log = log + '\toriginal_sequence'
         sequence = mut.sequence(how='min')
@@ -375,19 +377,20 @@ class ProteinAnalyzer:
             new_offset, sequence = esm_process_long_sequences(sequence, mut_idx)
             mut_idx = mut_idx - new_offset
             log = log + '\ttrimmed_sequence'
-        #  mask sequence
         assert sequence[mut_idx] == mut.origAA, 'sequence does not match wild-type AA - check offset'
         if method == 'mutant_marginals':
             input_seq = sequence[:mut_idx] + mut.changeAA + sequence[mut_idx + 1:]
         elif method == 'masked_marginals':
             input_seq = sequence[:mut_idx] + MASK_TOKEN + sequence[mut_idx + 1:]
+        else:
+            input_seq = sequence
         tokenizer = alphabet.get_batch_converter()
-        tokenized = tokenizer(input_seq)['input_ids']
-        tokens = torch.tensor(tokenized, dtype=torch.int64).unsqueeze(0).to(DEVICE)
-        _, _, batch_tokens = tokenizer(input=[(mut.long_name, input_seq)])
-        logits = esm_seq_logits(model=model, tokens=tokens, log=True, softmax=True, return_device='cpu', esm_version=1)
+        #tokens = torch.tensor(tokenized, dtype=torch.int64).unsqueeze(0).to(DEVICE)
+        _, _, batch_tokens = tokenizer([(mut.long_name, input_seq)])
+        batch_tokens = batch_tokens.to(DEVICE)
+        logits = esm_seq_logits(model=model, tokens=batch_tokens, log=True, softmax=True, return_device='cpu', esm_version=1)
         # use masked marginals score
-        return logits[mut_idx][AA_ESM_LOC[mut.changeAA]] - logits[mut_idx][AA_ESM_LOC[mut.origAA]], log
+        return float(logits[mut_idx][AA_ESM_LOC[mut.changeAA]] - logits[mut_idx][AA_ESM_LOC[mut.origAA]]), log
 
 
     @staticmethod

@@ -8,7 +8,8 @@ from multiprocessing import cpu_count
 from multiprocessing.pool import ThreadPool as Pool
 import tqdm
 from functools import partial
-from utils import print_if, adaptive_chunksize, afm_iterator, warn_if, summary_df, esm3_setup
+from utils import print_if, adaptive_chunksize, afm_iterator, warn_if, summary_df, \
+    esm3_setup, esm_setup
 from definitions import *
 import glob
 from math import ceil
@@ -154,7 +155,7 @@ def create_parser():
     parser.add_argument(
         "--offset",
         type=int,
-        default=0,
+        default=1,
         help="offset for mutation index default is 0",
     )
 
@@ -194,6 +195,23 @@ def create_parser():
         type=str,
         default="",
         help="Hugging-Face token required to use esm3",
+    )
+
+    parser.add_argument(
+        "--esm-inference",
+        type=int,
+        default=0,
+        choices=[0, 1],
+        help="should esm scores be infered from model or used precomputed scores \n"
+             "1 - inference, 0 - precomputed",
+    )
+
+    parser.add_argument(
+        "--scoring-method",
+        type=str,
+        choices=["wt_marginals", "mutant_marginals", "masked_marginals"],
+        default="masked_marginals",
+        help="scoring method for esm model inference",
     )
     return parser
 
@@ -354,12 +372,14 @@ def calc_mutations_eve_scores(args, analyzer, recalc=False, iter_desc='', impute
     return successful
 
 
-def calc_mutations_esm_scores(args, analyzer, recalc=False, iter_desc=''):
+def calc_mutations_esm_scores(args, analyzer, recalc=False, iter_desc='', inference=False, method='masked_marginals'):
     """
     :param args:
     :param analyzer: ProteinAnalyzer object
     :param recalc: bool re-calculate scored for mutations with available scores
     :param iter_desc:
+    :param inference: bool use precomputed scores or infer from model
+    :param method: scoring method str: wt_marginals | mutant_marginals | masked_marginals
     :return:
     """
     successful = 0
@@ -368,9 +388,17 @@ def calc_mutations_esm_scores(args, analyzer, recalc=False, iter_desc=''):
     else:
         tasks = [mut for mut in all_mutations() if not mut.has_esm]
     total_tasks = len(tasks)
+    if inference:
+        print_if(args.verbose, VERBOSE['program_progress'], f"Loading models...")
+        model, alphabet = esm_setup(model_name=ESM1B_MODEL)
+        print_if(args.verbose, VERBOSE['program_progress'], f"done")
     for mutation in tqdm.tqdm(tasks, desc=iter_desc, total=len(tasks)):
         print_if(args.verbose, VERBOSE['thread_progress'], f"Calculating ESM1b scores for {mutation.long_name}")
-        score, score_type = analyzer.score_mutation_esm1b_precomputed(mut=mutation, offset=args.offset)
+        if inference:
+            score, score_type = analyzer.score_mutation_esm_inference(model=model, alphabet=alphabet, mut=mutation,
+                                                                      method=method, offset=args.offset, log='infer\t')
+        else:
+            score, score_type = analyzer.score_mutation_esm1b_precomputed(mut=mutation, offset=args.offset)
         if score is not None:
             successful += 1
             mutation.update_score('ESM', score, esm_type=score_type)
@@ -457,7 +485,8 @@ def main(args):
             calc_mutations_eve_scores(args, analyzer, recalc=args.recalc, impute=args.use_cpt)
         if (action == 'score-ESM') or (action =='score-ESM1b'):
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating ESM-1b scores...")
-            calc_mutations_esm_scores(args, analyzer, recalc=args.recalc)
+            calc_mutations_esm_scores(args, analyzer, recalc=args.recalc, inference=args.esm_inference,
+                                      method=args.scoring_method)
         if action =='score-ESM3':
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating ESM-3 scores...")
             calc_mutations_esm3_scores(args, analyzer, recalc=args.recalc)
