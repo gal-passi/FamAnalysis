@@ -8,7 +8,7 @@ hash_url = lambda url: sha256(url).hexdigest()
 
 #  CONTACT INFO CHANGE TO YOUR EMAIL
 
-CONTACT = ""
+CONTACT = "haimasree.bhattacharya@mail.huji.ac.il"
 HEADERS = {'User-Agent': 'Python {}'.format(CONTACT)}
 HUGGINGFACE_TOKEN = "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"  # obtain read permission token
 
@@ -235,7 +235,7 @@ CPT_TRUNCATE_TAIL = 7
 
 ESM_AA_ORDER = 'LAGVSERTIDPKQNFYMHWC'
 ESM_AA_EXTENDED = 'LAGVSERTIDPKQNFYMHWCXBUZO.-|'
-AA_ESM_LOC = {aa: idx for idx, aa in enumerate(ESM3_AA_ORDER)}
+AA_ESM_LOC = {aa: idx for idx, aa in enumerate(ESM_AA_ORDER)}
 ESM_MAX_LENGTH = 1020
 
 #  ESM-1b
