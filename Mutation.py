@@ -133,6 +133,8 @@ class Mutation:
         :param description:
         :return: re.search obj if successful else raise ValueError
         """
+        if not description.startswith('p.'):
+            description = 'p.' + description
         res = re.search(MUTATION_REGEX, description)
         if not res:
             raise ValueError("Invalid input valid format of form p.{AA}{location}{AA}")
