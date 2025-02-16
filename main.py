@@ -142,7 +142,14 @@ def create_parser():
         help="recalculate scores for all mutations including those with existing score \n"
              "1 - recalc, 0 - calculate only missing scores",
     )
-
+    parser.add_argument(
+        "--optimized",
+        type=int,
+        default=0,
+        choices=[0, 1],
+        help="Use optimized version for the method if available \n"
+             "1 - uses optimized version of the algorithms if available, 0 - uses conventional version",
+    )
     parser.add_argument(
         "--use-cpt", "--cpt",
         type=int,
@@ -502,4 +509,5 @@ def main(args):
 if __name__ == "__main__":
     parser = create_parser()
     args = parser.parse_args()
+    print(args.optimized)
     main(args)
