@@ -3,6 +3,7 @@ from os.path import join as pjoin
 from hashlib import sha256
 import torch
 import re
+from pathlib import Path
 
 hash_url = lambda url: sha256(url).hexdigest()
 
@@ -27,12 +28,13 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 ROOT_DIR = dirname(abspath(__file__))
 DB = 'DB'
 DB_PATH = pjoin(ROOT_DIR, DB)
-PROTEINS = ''
+PROTEINS = 'proteins_30_fams'
 PROTEIN_PATH = pjoin(DB_PATH, PROTEINS)
-MUTATIONS = ''
+MUTATIONS = 'mutations_30_fams'
 MUTATION_PATH = pjoin(DB_PATH, MUTATIONS)
 AFM_PATH = pjoin(DB_PATH, 'AFM')
 EVE_PATH = pjoin(DB_PATH, 'EVE')
+EVE_PARQUET_DIR = Path(EVE_PATH) / "parquet_files"
 CPT_PATH = pjoin(DB_PATH, 'CPT')
 ESM_PATH = pjoin(DB_PATH, 'ESM')
 DB_CHILDREN = ['AFM', 'CPT', 'EVE', 'ESM', 'Family', 'Patients', PROTEINS, MUTATIONS]
@@ -249,6 +251,8 @@ ESM_DATA = 'ESM_1b_variants'
 ESM_DATA_PATH = pjoin(ESM_PATH, ESM_DATA)
 ESM_INDEX_PATH = pjoin(ESM_PATH, 'index.json')
 ESM_VARIANTS_PATH = pjoin(ESM_DATA_PATH, 'content', 'ALL_hum_isoforms_ESM1b_LLR')
+ESM_PARQUET_DIR = Path(ESM_VARIANTS_PATH)
+
 ESM_FILE_SUFFIX = '_LLR.csv'
 MASK_TOKEN = '<mask>'
 REP_LAYERS = [33]

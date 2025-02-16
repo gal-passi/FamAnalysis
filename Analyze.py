@@ -8,12 +8,49 @@ import warnings
 import glob
 import pandas as pd
 import pickle
+from functools import lru_cache
+from pathlib import Path
 from utils import afm_range_read, name_for_esm, sequence_from_esm_df, name_for_cpt, \
     sequence_from_cpt_df, seacrh_by_ref_seq, warn_if, esm_seq_logits, esm_process_long_sequences
 import Connections
 from definitions import *
 
+
 ROOT = os.path.join(os.path.dirname(__file__))
+
+
+def convert_csv_to_parquet(csv_path, model):
+    """Converts CSV to Parquet if it doesn't exist and returns the Parquet file path."""
+    filename = os.path.basename(csv_path).replace(".csv", ".parquet")
+    if model == 'ESM':
+        parquet_path = os.path.join(ESM_PARQUET_DIR, filename)
+    elif model == 'EVE':
+        parquet_path = os.path.join(EVE_PARQUET_DIR, filename)
+    else:
+        raise ValueError("Model must be 'ESM' or 'EVE'")
+
+    if not os.path.exists(parquet_path):
+        if model == 'EVE':
+            df = pd.read_csv(csv_path, low_memory=False)
+        elif model == 'ESM':
+            df = pd.read_csv(csv_path)
+        else:
+            raise ValueError("Model must be 'ESM' or 'EVE'")
+        df.to_parquet(parquet_path)
+        print(f"Converted: {csv_path} → {parquet_path}")
+
+    return parquet_path  
+
+@lru_cache(maxsize=200)  
+def load_parquet_cached(csv_path, model):
+    """Loads a Parquet file from disk with LRU caching."""
+    parquet_path = convert_csv_to_parquet(csv_path) 
+    if model == 'EVE':
+        return pd.read_parquet(parquet_path).fillna(-1)
+    elif model == 'ESM':
+        return pd.read_parquet(parquet_path)
+    else:
+        raise ValueError("Model must be 'ESM' or 'EVE'")
 
 
 class ProteinAnalyzer:
@@ -201,7 +238,8 @@ class ProteinAnalyzer:
         path = pjoin(EVE_VARIANTS_PATH, f"{prot_name}_HUMAN.csv")
         if not os.path.exists(path):
             return -1, -1
-        data = pd.read_csv(path, low_memory=False).fillna(-1)
+        data = load_parquet_cached(path, 'EVE')
+        # data = pd.read_csv(path, low_memory=False).fillna(-1)
         references = mutation.ref_seqs.values()  # usually will be of size 1
         for reference in references:
             if len(reference) < REF_SEQ_PADDING * 2:  # skip if red seq is too short
@@ -433,7 +471,8 @@ class ProteinAnalyzer:
     def _esm_interperter(mut, search_name, offset, use_ref_seq=False):
         file_path = pjoin(ESM_VARIANTS_PATH, search_name + ESM_FILE_SUFFIX)
         column = f"{mut.origAA} {mut.loc - offset}"
-        data = pd.read_csv(file_path)
+        data  = load_parquet_cached(file_path, 'ESM')
+        # data = pd.read_csv(file_path)
         assert mut.changeAA in A_A, f'invalid Amino Acid symbol {mut.long_name}'
         if mut.changeAA == 'X':  # invalid change
             return None, None
