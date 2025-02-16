@@ -339,7 +339,7 @@ def calc_mutations_afm_scores(args, analyzer, chunk=None, iter_desc='', use_alia
     return successful
 
 
-def calc_mutations_eve_scores(args, analyzer, recalc=False, iter_desc='', impute=True):
+def calc_mutations_eve_scores(args, analyzer, recalc=False, iter_desc='', impute=True, optimized=0):
     """
     :param args:
     :param analyzer: ProteinAnalyzer object
@@ -358,7 +358,7 @@ def calc_mutations_eve_scores(args, analyzer, recalc=False, iter_desc='', impute
     total_tasks = len(tasks)
     for mutation in tqdm.tqdm(tasks, desc=iter_desc, total=len(tasks)):
         print_if(args.verbose, VERBOSE['thread_progress'], f"Calculating EVEModel scores for {mutation.long_name}")
-        score, prediction = analyzer.score_mutation_evemodel(protein=mutation.protein, mutation=mutation)
+        score, prediction = analyzer.score_mutation_evemodel(protein=mutation.protein, mutation=mutation, optimized=optimized)
         if score != -1:
             successful += 1
             mutation.update_score('EVE', score, eve_type='EVEmodel')
@@ -371,7 +371,7 @@ def calc_mutations_eve_scores(args, analyzer, recalc=False, iter_desc='', impute
             tasks = [mut for mut in all_mutations() if not mut.has_eve]
         for mutation in tqdm.tqdm(tasks, desc=iter_desc, total=len(tasks)):
             print_if(args.verbose, VERBOSE['thread_progress'], f"Calculating CPT scores for {mutation.long_name}")
-            score, eve_type = analyzer.score_mutation_eve_impute(mut=mutation, offset=args.offset, gz=True)
+            score, eve_type = analyzer.score_mutation_eve_impute(mut=mutation, offset=args.offset, gz=True, optimized=optimized)
             if score != -1:
                 successful += 1
                 mutation.update_score('EVE', score, eve_type=eve_type)
@@ -379,7 +379,7 @@ def calc_mutations_eve_scores(args, analyzer, recalc=False, iter_desc='', impute
     return successful
 
 
-def calc_mutations_esm_scores(args, analyzer, recalc=False, iter_desc='', inference=False, method='masked_marginals'):
+def calc_mutations_esm_scores(args, analyzer, recalc=False, iter_desc='', inference=False, method='masked_marginals', optimized=0):
     """
     :param args:
     :param analyzer: ProteinAnalyzer object
@@ -405,7 +405,7 @@ def calc_mutations_esm_scores(args, analyzer, recalc=False, iter_desc='', infere
             score, score_type = analyzer.score_mutation_esm_inference(model=model, alphabet=alphabet, mut=mutation,
                                                                       method=method, offset=args.offset, log='infer\t')
         else:
-            score, score_type = analyzer.score_mutation_esm1b_precomputed(mut=mutation, offset=args.offset)
+            score, score_type = analyzer.score_mutation_esm1b_precomputed(mut=mutation, offset=args.offset, optimized=optimized)
         if score is not None:
             successful += 1
             mutation.update_score('ESM', score, esm_type=score_type)
@@ -489,11 +489,11 @@ def main(args):
             print_if(args.verbose, VERBOSE['program_progress'], f"done, scored {total_scores} of {n_muts} mutations")
         if action == 'score-EVE':
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating EVEmodel scores...")
-            calc_mutations_eve_scores(args, analyzer, recalc=args.recalc, impute=args.use_cpt)
+            calc_mutations_eve_scores(args, analyzer, recalc=args.recalc, impute=args.use_cpt, optimized=args.optimized)
         if (action == 'score-ESM') or (action =='score-ESM1b'):
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating ESM-1b scores...")
             calc_mutations_esm_scores(args, analyzer, recalc=args.recalc, inference=args.esm_inference,
-                                      method=args.scoring_method)
+                                      method=args.scoring_method, optimized=args.optimized)
         if action =='score-ESM3':
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating ESM-3 scores...")
             calc_mutations_esm3_scores(args, analyzer, recalc=args.recalc)
@@ -509,5 +509,4 @@ def main(args):
 if __name__ == "__main__":
     parser = create_parser()
     args = parser.parse_args()
-    print(args.optimized)
     main(args)
