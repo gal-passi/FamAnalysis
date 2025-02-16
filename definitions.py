@@ -251,7 +251,7 @@ ESM_DATA = 'ESM_1b_variants'
 ESM_DATA_PATH = pjoin(ESM_PATH, ESM_DATA)
 ESM_INDEX_PATH = pjoin(ESM_PATH, 'index.json')
 ESM_VARIANTS_PATH = pjoin(ESM_DATA_PATH, 'content', 'ALL_hum_isoforms_ESM1b_LLR')
-ESM_PARQUET_DIR = Path(ESM_VARIANTS_PATH)
+ESM_PARQUET_DIR = Path(ESM_PATH) / "parquet_files"
 
 ESM_FILE_SUFFIX = '_LLR.csv'
 MASK_TOKEN = '<mask>'
