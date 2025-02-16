@@ -44,7 +44,7 @@ def convert_csv_to_parquet(csv_path, model):
 @lru_cache(maxsize=200)  
 def load_parquet_cached(csv_path, model):
     """Loads a Parquet file from disk with LRU caching."""
-    parquet_path = convert_csv_to_parquet(csv_path) 
+    parquet_path = convert_csv_to_parquet(csv_path, model) 
     if model == 'EVE':
         return pd.read_parquet(parquet_path).fillna(-1)
     elif model == 'ESM':
