@@ -5,7 +5,7 @@
 #SBATCH --time=01:00:00                 
 #SBATCH --cpus-per-task=8      
 #SBATCH --mem=16G                       
-#SBATCH --array=1-$(python -c "import run_mutation; print(len(run_mutation.protein_names()))")%100
+#SBATCH --array=1-$(python -c "import main; print(len(main.protein_names()))")%100
 
 # Run the Python script with the current task ID
 conda activate famanalysis
