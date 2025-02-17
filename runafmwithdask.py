@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 import glob
+import json
 
 from dask.distributed import Client
 import dask.dataframe as dd
@@ -122,36 +123,37 @@ def afm_score_batch(first_letter, mutations):
 
     return results
 
-
 if __name__ == "__main__":
-    partition_and_save() 
     tasks = list(all_mutations())
     client = Client(n_workers=4)
-    print(client.dashboard_link)
-
+    # print(client.dashboard_link)
+    partition_and_save() 
+    profile_data = client.profile()
+    with open("dask_profile.json", "w") as f:
+        json.dump(profile_data, f, indent=4)
     # Group mutations by the first letter of their variant
-    grouped_mutations = {}
-    for mutation in tasks:
-        first_letter = mutation['variant'][0]  # Get the first letter
-        if first_letter not in grouped_mutations:
-            grouped_mutations[first_letter] = []
-        grouped_mutations[first_letter].append(mutation)
+    # grouped_mutations = {}
+    # for mutation in tasks:
+    #     first_letter = mutation['variant'][0]  # Get the first letter
+    #     if first_letter not in grouped_mutations:
+    #         grouped_mutations[first_letter] = []
+    #     grouped_mutations[first_letter].append(mutation)
 
-    # Create Dask computations for each group
-    computations = [
-        delayed(afm_score_batch)(first_letter, mutations)
-        for first_letter, mutations in grouped_mutations.items()
-    ]
+    # # Create Dask computations for each group
+    # computations = [
+    #     delayed(afm_score_batch)(first_letter, mutations)
+    #     for first_letter, mutations in grouped_mutations.items()
+    # ]
 
-    # Compute all results in parallel
-    results_list = compute(*computations)
+    # # Compute all results in parallel
+    # results_list = compute(*computations)
 
-    # Flatten the results list (since we return a list per batch)
-    results = [item for sublist in results_list for item in sublist]
+    # # Flatten the results list (since we return a list per batch)
+    # results = [item for sublist in results_list for item in sublist]
 
-    # Save results
-    with open('resultsafmwithdask.csv', 'w') as f:
-        for result in results:
-            f.write(f"{result['protein_name']},{result['name']},{result['afm_score']}\n")
+    # # Save results
+    # with open('resultsafmwithdask.csv', 'w') as f:
+    #     for result in results:
+    #         f.write(f"{result['protein_name']},{result['name']},{result['afm_score']}\n")
 
     client.shutdown()
