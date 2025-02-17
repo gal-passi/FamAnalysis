@@ -171,3 +171,5 @@ input.csv
 esmp.csv
 results*
 test_data.csv
+
+afm_partitions/*
