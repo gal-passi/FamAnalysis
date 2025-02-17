@@ -2,6 +2,7 @@ from pathlib import Path
 import os
 import glob
 import json
+import time
 
 from dask.distributed import Client
 import dask.dataframe as dd
@@ -124,8 +125,16 @@ def afm_score_batch(first_letter, mutations):
     return results
 
 if __name__ == "__main__":
+    start_time_mutations = time.time()
     tasks = list(all_mutations())
+    end_time_mutations = time.time()
+    mutations_time = end_time_mutations - start_time_mutations
+
     print(f"Total mutations: {len(tasks)}")
+    print(f"Time to generate mutations: {mutations_time:.4f} seconds")
+
+    start_time_dask = time.time()
+
     client = Client(n_workers=4)
     print(client.dashboard_link)
     # partition_and_save() 
@@ -154,8 +163,13 @@ if __name__ == "__main__":
         for result in results:
             f.write(f"{result['protein_name']},{result['name']},{result['afm_score']}\n")
 
+    end_time_dask = time.time()
+    dask_execution_time = end_time_dask - start_time_dask
+
     profile_data = client.profile()
     with open("full_dask_profile.json", "w") as f:
         json.dump(profile_data, f, indent=4)
+
+    print(f"Time to run all Dask computations: {dask_execution_time:.4f} seconds")
 
     client.shutdown()
