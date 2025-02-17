@@ -47,7 +47,7 @@ def partition_and_save():
     This step should be done once as preprocessing.
     """
     df = dd.read_csv(
-        "AlphaMissense_aa_substitutions.tsv", sep='\t', header=AFM_HEADER,
+        AFM_LOC, sep='\t', header=AFM_HEADER,
         usecols=AFM_COL_NAMES
     )
 
@@ -124,9 +124,9 @@ def afm_score_batch(first_letter, mutations):
     return results
 
 if __name__ == "__main__":
-    tasks = list(all_mutations())
+    # tasks = list(all_mutations())
     client = Client(n_workers=4)
-    # print(client.dashboard_link)
+    print(client.dashboard_link)
     partition_and_save() 
     profile_data = client.profile()
     with open("dask_profile.json", "w") as f:
