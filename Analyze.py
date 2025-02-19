@@ -373,7 +373,7 @@ class ProteinAnalyzer:
         #  case 1 reference name found in ESM records
         if entry_name in self.esm_index:
             search_name = self.esm_index[entry_name]
-            score, score_type = self._esm_interperter(mut, search_name, offset, optimized)
+            score, score_type = self._esm_interperter(mut, search_name, offset, optimized=optimized)
             if score is not None:
                 return score, score_type
         #  case 2 expend search to all known protein references
@@ -474,6 +474,7 @@ class ProteinAnalyzer:
         file_path = pjoin(ESM_VARIANTS_PATH, search_name + ESM_FILE_SUFFIX)
         column = f"{mut.origAA} {mut.loc - offset}"
         if optimized == 1:
+            print("optimized")
             data  = load_parquet_cached(file_path, 'ESM')
         else:
             data = pd.read_csv(file_path)
