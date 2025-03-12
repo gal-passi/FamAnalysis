@@ -15,161 +15,163 @@ AFM_HEADER = 3
 AFM_COL_NAMES = ["uniprot_id", "protein_variant", "am_pathogenicity"]
 AFM_LOC = "./DB/AFM/AlphaMissense_aa_substitutions.tsv"
 DB_PATH = Path("./DB/")
-PROTEINS = 'proteins_30_fams'
+PROTEINS = "proteins_30_fams"
 PROTEIN_PATH = DB_PATH / PROTEINS
+
 
 def all_proteins():
     """
     :return: iterable of all Protein objects in DB
     """
-    for path in glob.glob(os.path.join(PROTEIN_PATH, '*')):
+    # test_cases = ["A3GALT2", "A4GALT", "AADACL4", "A1CF", "A2M"]
+    # for prot_name in test_cases:
+    for path in glob.glob(os.path.join(PROTEIN_PATH, "*")):
         prot_name = os.path.basename(path)
         yield Protein(ref_name=prot_name)
 
 
-# def all_mutations():
-#     for prot in all_proteins():
-#         for mutation in prot.generate_mutations():
-#             yield mutation
-
-def all_mutations():
+def all_mutations(computed=[], use_alias=False):
     """Yields only necessary mutation info to avoid large memory usage."""
     for prot in all_proteins():
         for mutation in prot.generate_mutations():
-            yield {
-                "protein_name": mutation.protein_name,
-                "name": mutation.name,
-                "variant": f"{mutation.origAA}{mutation.loc}{mutation.changeAA}",
-            }
+            if mutation.name not in computed:
+                uniprot_id = mutation.protein.Uid
+                uniprot_ids = [uniprot_id]
+                if use_alias:
+                    reviewed_uids = mutation.protein.all_uids()["reviewed"]
+                    if isinstance(reviewed_uids, str):
+                        reviewed_uids = [reviewed_uids]
+                    for rid in reviewed_uids:
+                        if rid not in uniprot_ids:
+                            uniprot_ids.append(rid)
+                uniprot_ids = sorted(uniprot_ids)
+                yield {
+                    "protein_name": mutation.protein_name,
+                    "name": mutation.name,
+                    "variant": f"{mutation.origAA}{mutation.loc}{mutation.changeAA}",
+                    "uniprot_ids": list(uniprot_ids),
+                }
+
 
 def partition_and_save():
     """
     Partitions the AlphaMissense dataset by the first letter of 'protein_variant' and saves them separately.
     This step should be done once as preprocessing.
     """
-    df = dd.read_csv(
-        AFM_LOC, sep='\t', header=AFM_HEADER,
-        usecols=AFM_COL_NAMES
-    )
+    df = dd.read_csv(AFM_LOC, sep="\t", header=AFM_HEADER, usecols=AFM_COL_NAMES)
 
-    df['first_letter'] = df['protein_variant'].str[0]
-
-    df.to_parquet('afm_partitions', partition_on=['first_letter'], engine='pyarrow')
+    df.to_parquet("afm_partitions", partition_on=["uniprot_id"], engine="pyarrow")
 
 
-def afm_score(protein_name, name, variant):
-    """
-    Searches for AlphaMissense score using pre-partitioned dataset (by first letter of variant).
-    
-    :param variant: str, mutation in [AA][location][AA] format
-    :return: float AlphaMissense score if found, else None
-    """
-    first_letter = variant[0]  # Get first letter
-    partition_path = f"afm_partitions/first_letter={first_letter}"  # Path to partitioned data
-
-    # Load only the relevant partition
-    try:
-        data = dd.read_parquet(partition_path, engine='pyarrow')
-    except FileNotFoundError:
-        return None  # If no partition exists, return None
-
-    # Perform filtering
-    score = data[data['protein_variant'] == variant]['am_pathogenicity'].compute()
-
-    # Return first match or None if not found
-    return {'protein_name': protein_name, 'name': name, 'afm_score': float(score.iloc[0]) if not score.empty else ''}
-
-# if __name__ == "__main__":
-#     tasks = list(all_mutations())
-#     client = Client(n_workers=4)
-#     print(client.dashboard_link)
-#     # partition_and_save() 
-#     computaion = [delayed(afm_score(variant=f"{mutation.origAA}{mutation.loc}{mutation.changeAA}", protein_name=mutation.protein_name, name=mutation.name)) for mutation in tasks]
-#     results = compute(*computaion)
-#     with open('resultsdaskfull.csv', 'w') as f:
-#         for result in results:
-#             f.write(f"{result['protein_name']},{result['name']},{result['afm_score']}\n")
-#     client.shutdown()
-
-def afm_score_batch(first_letter, mutations):
+def afm_score_batch(uniprot_id, mutations):
     """
     Searches AlphaMissense scores for a batch of mutations using a single partition load.
 
-    :param first_letter: str, the first letter of mutations
+    :param uniprot_id: str, the first letter of mutations
     :param mutations: list of mutation objects
-    :return: list of dicts with {protein_name, name, afm_score}
+    :param results: dict, shared results dictionary to store scores
+    :return: None (modifies results in-place)
     """
-    partition_path = f"afm_partitions/first_letter={first_letter}"  # Path to partitioned data
-
-    # Load only the relevant partition
+    results = {}
+    partition_path = f"afm_partitions/uniprot_id={uniprot_id}"
     try:
-        data = dd.read_parquet(partition_path, engine='pyarrow')
+        data = dd.read_parquet(partition_path, engine="pyarrow")
     except FileNotFoundError:
-        return [{'protein_name': mut['protein_name'], 'name': mut['name'], 'afm_score': ''} for mut in mutations]  # If no partition exists
+        return results
 
-    # Create a list of all variants we need to search
-    variant_list = [mut['variant'] for mut in mutations]
+    # Compute the dataset to load it into memory
+    data = data.compute()
 
-    # Filter only the needed variants
-    filtered_data = data[data['protein_variant'].isin(variant_list)].compute()
-
-    # Create a lookup dictionary for fast retrieval
-    score_dict = dict(zip(filtered_data['protein_variant'], filtered_data['am_pathogenicity']))
-
-    # Return results, looking up the score if it exists
-    results = []
     for mut in mutations:
-        score = score_dict.get(mut['variant'], '')
-        results.append({'protein_name': mut['protein_name'], 'name': mut['name'], 'afm_score': score})
+        if mut["name"] in results:
+            continue  # Skip if entry already exists
 
+        filtered_data = data[data["protein_variant"] == mut["variant"]]
+        score = (
+            float(filtered_data["am_pathogenicity"].iloc[0])
+            if not filtered_data.empty
+            else ""
+        )
+
+        if score:
+            results[mut["name"]] = {
+                "uniprot_id": uniprot_id,
+                "protein_name": mut["protein_name"],
+                "afm_score": score,
+            }
     return results
+
+
+def process_mutations(tasks):
+    """
+    Processes a batch of mutations using Dask.
+    """
+    grouped_mutations = {}
+
+    for mutation in tasks:
+        for uid in mutation["uniprot_ids"]:
+            uniprot_id = uid
+            if uniprot_id not in grouped_mutations:
+                grouped_mutations[uniprot_id] = []
+            grouped_mutations[uniprot_id].append(mutation)
+
+    computations = [
+        afm_score_batch(uniprot_id, mutations)
+        for uniprot_id, mutations in grouped_mutations.items()
+    ]
+    results_list = compute(*computations)
+    # Example: ({}, {}, {'Q127H': {'uniprot_id': 'U3KPV4', 'protein_name': 'A3GALT2', 'afm_score': 0.2044}})
+    results = {}
+
+    for batch_result in results_list:
+        for key, value in batch_result.items():
+            if key not in results:
+                results[key] = value
+    return results
+
 
 if __name__ == "__main__":
     start_time_mutations = time.time()
     tasks = list(all_mutations())
     end_time_mutations = time.time()
-    mutations_time = end_time_mutations - start_time_mutations
 
     print(f"Total mutations: {len(tasks)}")
-    print(f"Time to generate mutations: {mutations_time:.4f} seconds")
+    print(
+        f"Time to generate mutations: {end_time_mutations - start_time_mutations:.4f} seconds"
+    )
+
+    client = Client(n_workers=2)
+    print(client.dashboard_link)
 
     start_time_dask = time.time()
 
-    client = Client(n_workers=4)
-    print(client.dashboard_link)
-    # partition_and_save() 
-    # Group mutations by the first letter of their variant
-    grouped_mutations = {}
-    for mutation in tasks:
-        first_letter = mutation['variant'][0]  # Get the first letter
-        if first_letter not in grouped_mutations:
-            grouped_mutations[first_letter] = []
-        grouped_mutations[first_letter].append(mutation)
+    results = process_mutations(tasks)
 
-    # Create Dask computations for each group
-    computations = [
-        delayed(afm_score_batch)(first_letter, mutations)
-        for first_letter, mutations in grouped_mutations.items()
-    ]
-
-    # Compute all results in parallel
-    results_list = compute(*computations)
-
-    # Flatten the results list (since we return a list per batch)
-    results = [item for sublist in results_list for item in sublist]
-
-    # Save results
-    with open('resultsafmwithdask.csv', 'w') as f:
-        for result in results:
-            f.write(f"{result['protein_name']},{result['name']},{result['afm_score']}\n")
+    with open("resultsafmwithdask.csv", "w") as f:
+        f.write("uids,protein_name,name,afm_score\n")
+        for name, result in results.items():
+            f.write(
+                f"{result['uniprot_id']},{result['protein_name']},{name},{result['afm_score']}\n"
+            )
 
     end_time_dask = time.time()
-    dask_execution_time = end_time_dask - start_time_dask
+    print(
+        f"Time to run all Dask computations(without alias): {end_time_dask - start_time_dask:.4f} seconds"
+    )
 
-    profile_data = client.profile()
-    with open("full_dask_profile.json", "w") as f:
-        json.dump(profile_data, f, indent=4)
+    tasks = list(all_mutations(computed=results.keys(), use_alias=True))
+    start_time_dask = time.time()
 
-    print(f"Time to run all Dask computations: {dask_execution_time:.4f} seconds")
+    results = process_mutations(tasks)
+
+    with open("resultsafmwithdask.csv", "a") as f:
+        for name, result in results.items():
+            f.write(
+                f"{result['uniprot_id']},{result['protein_name']},{name},{result['afm_score']}\n"
+            )
+    end_time_dask = time.time()
+    print(
+        f"Time to run all Dask computations (with alias): {end_time_dask - start_time_dask:.4f} seconds"
+    )
 
     client.shutdown()
