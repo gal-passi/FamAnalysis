@@ -131,6 +131,21 @@ def process_mutations(tasks):
 
 
 if __name__ == "__main__":
+
+    # start_time_partition = time.time()
+
+    client = Client(n_workers=2)
+    print(client.dashboard_link)
+
+    # partition_and_save()
+    
+    # end_time_partition = time.time()
+
+    # print(
+    #     f"Time to generate partitions: {end_time_partition - start_time_partition:.4f} seconds"
+    # )
+
+
     start_time_mutations = time.time()
     tasks = list(all_mutations())
     end_time_mutations = time.time()
@@ -139,9 +154,6 @@ if __name__ == "__main__":
     print(
         f"Time to generate mutations: {end_time_mutations - start_time_mutations:.4f} seconds"
     )
-
-    client = Client(n_workers=2)
-    print(client.dashboard_link)
 
     start_time_dask = time.time()
 
