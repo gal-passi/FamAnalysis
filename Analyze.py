@@ -350,12 +350,15 @@ class ProteinAnalyzer:
         variant = f"{mutation.origAA}{variant_location}{mutation.changeAA}"
         index = uid_index if uid_index is not None else self.af_index
         uids = [main_uid] + reviewed_uids if use_alias else [main_uid]
+        uids = sorted(uids)
+        # print(f"uids = {uids}")
         for uid in uids:
             if uid in index:
                 idx_from = self.af_index[uid]
                 idx_to = self.af_ranges[str(idx_from)]
-                score = self._afm_score_from_uid(variant, idx_from, idx_to, chunk)
+                score = self._afm_score_from_uid(uid, variant, idx_from, idx_to, chunk)
                 if score is not None:
+                    # print(f"uid = {uid} score={score}")
                     return score
         # score not found
         return None
@@ -474,7 +477,6 @@ class ProteinAnalyzer:
         file_path = pjoin(ESM_VARIANTS_PATH, search_name + ESM_FILE_SUFFIX)
         column = f"{mut.origAA} {mut.loc - offset}"
         if optimized == 1:
-            print("optimized")
             data  = load_parquet_cached(file_path, 'ESM')
         else:
             data = pd.read_csv(file_path)
@@ -498,7 +500,7 @@ class ProteinAnalyzer:
         return None, None
 
     @staticmethod
-    def _afm_score_from_uid(variant, idx_from, idx_to, chunk=None):
+    def _afm_score_from_uid(uid, variant, idx_from, idx_to, chunk=None):
         """
         extract alpha Missense score from raw data if not found returns -1
         :param variant: str protein variant in formal [AA][location][AA]
@@ -509,5 +511,7 @@ class ProteinAnalyzer:
         :return:
         """
         data = afm_range_read(idx_from, idx_to) if chunk is None else chunk
-        score = data[data['protein_variant'] == variant]['am_pathogenicity']
+        score = data[(data['protein_variant'] == variant) & (data['uniprot_id'] == uid)]['am_pathogenicity']
+        # if not score.empty:
+        #     print(data[data['protein_variant'] == variant])
         return float(score.iloc[0]) if not score.empty else None
