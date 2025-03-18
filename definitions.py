@@ -8,7 +8,7 @@ hash_url = lambda url: sha256(url).hexdigest()
 
 #  CONTACT INFO CHANGE TO YOUR EMAIL
 
-CONTACT = ""
+CONTACT = "haimasree.bhattacharya@mail.huji.ac.il"
 HEADERS = {'User-Agent': 'Python {}'.format(CONTACT)}
 HUGGINGFACE_TOKEN = "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"  # obtain read permission token
 
