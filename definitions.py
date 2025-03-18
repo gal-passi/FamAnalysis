@@ -64,7 +64,7 @@ ALPHAFOLD_PDB_URL = "https://alphafold.ebi.ac.uk/files/AF-{}-F1-model_v1.pdb"
 ENTREZ_API_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
 ENTREZ_AA_RET = 'fasta_cds_aa'
 ENTREZ_NA_RET = 'fasta_cds_na'
-ENTREZ_SEARCH_URL = ENTREZ_API_URL + "esearch.fcgi?db=nuccore&term=NM_001385640&usehistory=y"
+ENTREZ_SEARCH_URL = ENTREZ_API_URL + "esearch.fcgi?db=nuccore&term={}&usehistory=y"
 ENTREZ_SEQ_FROM_KEYS = ENTREZ_API_URL + \
                        "efetch.fcgi?db=nuccore&query_key={}&WebEnv={}&rettype={}&retmode=text"
 
@@ -159,9 +159,8 @@ NO_TYPE = 'no_score'
 
 #  PROTEINS CONSTANTS
 
-
 PROTEIN_ALIASES = {'LOC100287896': 'LIPT2', 'FPGT-TNNI3K': 'TNNI3K', 'ATPSJ2-PTCD1': 'PTCD1', 'CCL4L1': 'CCL4L2',
-                   'PTGDR2': 'CCDC86', '4-SEPT': 'SEPT4', '4-Sep': 'SEPT4', 'TPTEP2-CSNK1E': 'CSNK1E', 'LOC101928841': 'ADPRHL1',
+                   'PTGDR2': 'CCDC86', '4-SEPT': 'SEPT4', '4-Sep': 'SEPT4','TPTEP2-CSNK1E': 'CSNK1E', 'LOC101928841': 'ADPRHL1',
                    'LOC102724159': 'PWP2', 'LOC100421372': 'MSANTD7', 'LOC102724488': 'SYT15B', 'LOC645177': 'IRAG2',
                    'CBSL': 'CBS_HUMAN'}
 REMOVED_PROTEINS = ['LOC100996842', 'GLRA4', 'LOC390877', 'NM_001365196', 'LOC645188', 'COL4A2-AS2', 'PPP5D1',

@@ -435,7 +435,6 @@ class ProteinAnalyzer:
         # use masked marginals score
         return float(logits[mut_idx][AA_ESM_LOC[mut.changeAA]] - logits[mut_idx][AA_ESM_LOC[mut.origAA]]), log
 
-
     @staticmethod
     def score_mutation_esm3(model, tokenizer, mut, method='masked_marginals', offset=1, log=''):
         """

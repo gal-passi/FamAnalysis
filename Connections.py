@@ -59,7 +59,7 @@ class Uniport:
                     if idx >= len(seq):
                         continue
                     if seq[idx] == wt:
-                        return iso, seq
+                        return {iso: seq}
             isoforms = {**isoforms, **res}
         return isoforms if not ref_mut else {}
 
@@ -287,8 +287,7 @@ class EntrezApi:
             return None
         return {id: seq}
 
-
-    def obtain_seq(self, entrez_id, seq_type='aa'):
+    def obtain_seq_with_keys(self, entrez_id, seq_type='aa'):
         """
         :param entrez_id: str entrez id
         :param seq_type: str in na | aa
@@ -300,6 +299,33 @@ class EntrezApi:
             return None
         web_env, query_key = keys
         return self._seq_from_keys(id=entrez_id, web_env=web_env, query_key=query_key, seq_type=seq_type)
+
+    def fetch_NCBI_seq(self, ncbi_id):
+        """
+        fetches amino acid sequence from ncbi
+        :param ncbi_id: str (format NM_001282166.1)
+        :return: {ncbi_id : sequence}
+        """
+        print_if(self._v, VERBOSE['thread_progress'], f"Retrieving isoform {ncbi_id} from NCBI...")
+        try:
+            handle = Entrez.efetch(db="nucleotide", id=ncbi_id, retmode="xml")
+        except HTTPError as e:
+            warn_if(self._v, VERBOSE['thread_warnings'],
+                    f'Unable to fetch NCBI record with id {ncbi_id} HTTPError...skipping')
+            warn_if(self._v, VERBOSE['raw_warnings'], f'\n{e}')
+            return {}
+        records = Entrez.read(handle)
+        try:
+            for dict_entry in records[0]["GBSeq_feature-table"]:
+                if dict_entry['GBFeature_key'] == 'CDS':
+                    for sub_dict in dict_entry["GBFeature_quals"]:
+                        if sub_dict['GBQualifier_name'] == 'translation':
+                            print_if(self._v, VERBOSE['thread_progress'], f"done")
+                            return {ncbi_id: sub_dict["GBQualifier_value"]}
+        except Exception as e:
+            warn_if(self._v, VERBOSE['thread_warnings'], f'Unable to fetch NCBI record with id {ncbi_id}...skipping')
+            warn_if(self._v, VERBOSE['raw_warnings'], f'\n{e}')
+            return {}
 
 
 # will be deprecated
@@ -315,29 +341,4 @@ def fatch_all_NCBIs(self, ncbi_id):
         idx += 1
 
 
-def fetch_NCBI_seq(self, ncbi_id):
-    """
-    fetches amino acid sequence from ncbi
-    :param ncbi_id: str (format NM_001282166.1)
-    :return: {ncbi_id : sequence}
-    """
-    print_if(self._v, VERBOSE['thread_progress'], f"Retrieving isoform {ncbi_id} from NCBI...")
-    try:
-        handle = Entrez.efetch(db="nucleotide", id=ncbi_id, retmode="xml")
-    except HTTPError as e:
-        warn_if(self._v, VERBOSE['thread_warnings'],
-                f'Unable to fetch NCBI record with id {ncbi_id} HTTPError...skipping')
-        warn_if(self._v, VERBOSE['raw_warnings'], f'\n{e}')
-        return {}
-    records = Entrez.read(handle)
-    try:
-        for dict_entry in records[0]["GBSeq_feature-table"]:
-            if dict_entry['GBFeature_key'] == 'CDS':
-                for sub_dict in dict_entry["GBFeature_quals"]:
-                    if sub_dict['GBQualifier_name'] == 'translation':
-                        print_if(self._v, VERBOSE['thread_progress'], f"done")
-                        return {ncbi_id: sub_dict["GBQualifier_value"]}
-    except Exception as e:
-        warn_if(self._v, VERBOSE['thread_warnings'], f'Unable to fetch NCBI record with id {ncbi_id}...skipping')
-        warn_if(self._v, VERBOSE['raw_warnings'], f'\n{e}')
-        return {}
+
