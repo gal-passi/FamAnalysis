@@ -160,7 +160,7 @@ if __name__ == "__main__":
     results = process_mutations(tasks)
 
     with open("resultsafmwithdask.csv", "w") as f:
-        f.write("uids,protein_name,name,afm_score\n")
+        f.write("uids,protein,variant,afm\n")
         for name, result in results.items():
             f.write(
                 f"{result['uniprot_id']},{result['protein_name']},{name},{result['afm_score']}\n"
