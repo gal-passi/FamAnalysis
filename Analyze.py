@@ -8,12 +8,49 @@ import warnings
 import glob
 import pandas as pd
 import pickle
+from functools import lru_cache
+from pathlib import Path
 from utils import afm_range_read, name_for_esm, sequence_from_esm_df, name_for_cpt, \
     sequence_from_cpt_df, seacrh_by_ref_seq, warn_if, esm_seq_logits, esm_process_long_sequences
 import Connections
 from definitions import *
 
+
 ROOT = os.path.join(os.path.dirname(__file__))
+
+
+def convert_csv_to_parquet(csv_path, model):
+    """Converts CSV to Parquet if it doesn't exist and returns the Parquet file path."""
+    filename = os.path.basename(csv_path).replace(".csv", ".parquet")
+    if model == 'ESM':
+        parquet_path = os.path.join(ESM_PARQUET_DIR, filename)
+    elif model == 'EVE':
+        parquet_path = os.path.join(EVE_PARQUET_DIR, filename)
+    else:
+        raise ValueError("Model must be 'ESM' or 'EVE'")
+
+    if not os.path.exists(parquet_path):
+        if model == 'EVE':
+            df = pd.read_csv(csv_path, low_memory=False)
+        elif model == 'ESM':
+            df = pd.read_csv(csv_path)
+        else:
+            raise ValueError("Model must be 'ESM' or 'EVE'")
+        df.to_parquet(parquet_path)
+        print(f"Converted: {csv_path} → {parquet_path}")
+
+    return parquet_path  
+
+@lru_cache(maxsize=200)  
+def load_parquet_cached(csv_path, model):
+    """Loads a Parquet file from disk with LRU caching."""
+    parquet_path = convert_csv_to_parquet(csv_path, model) 
+    if model == 'EVE':
+        return pd.read_parquet(parquet_path).fillna(-1)
+    elif model == 'ESM':
+        return pd.read_parquet(parquet_path)
+    else:
+        raise ValueError("Model must be 'ESM' or 'EVE'")
 
 
 class ProteinAnalyzer:
@@ -156,7 +193,7 @@ class ProteinAnalyzer:
         return prot_name in list(map(find_file, glob.glob(pjoin(EVE_DATA_PATH, '*'))))
 
     # TODO change eve db to work with unip - search by name might miss some proteins
-    def score_mutation_evemodel(self, protein, mutation, prot_name=None, download_records=False):
+    def score_mutation_evemodel(self, protein, mutation, prot_name=None, download_records=False, optimized=0):
         """
         looks for an evemodel score for the mutation given
         :param download_records: bool whether to download new eve records. This should be True is user choose setup
@@ -168,13 +205,13 @@ class ProteinAnalyzer:
         search_name = protein.name if not prot_name else prot_name
         #  Case 1: Protein reference in is directly found in eve records
         if search_name in self.eve_records:
-            res = self._eve_interperter(search_name, mutation)
+            res = self._eve_interperter(search_name, mutation, optimized)
             if res != (-1, -1):
                 return res
         # Case 2: Protein has an alias directly found in eve records
         for alias in protein.aliases:
             if alias in self.eve_records:
-                res = self._eve_interperter(alias, mutation)
+                res = self._eve_interperter(alias, mutation, optimized)
                 if res != (-1, -1):
                     return res
         #  Case 3: Protein main reference is an alias of a record directly covered by eve
@@ -184,14 +221,14 @@ class ProteinAnalyzer:
                 search_flag = self._unip.download_eve_data(name) if download_records else \
                     (search_name in self.eve_records)
                 if search_flag:
-                    res = self._eve_interperter(name, mutation)
+                    res = self._eve_interperter(name, mutation, optimized)
                     if res != (-1, -1):
                         return res
                 else:
                     continue
         return -1, -1
 
-    def _eve_interperter(self, prot_name, mutation):
+    def _eve_interperter(self, prot_name, mutation, optimized):
         """
         helper function for score_mutation_evemodel searches an evemodel csv for the mutation
         :param uniport_id: str Uid of the evemodel data
@@ -201,7 +238,10 @@ class ProteinAnalyzer:
         path = pjoin(EVE_VARIANTS_PATH, f"{prot_name}_HUMAN.csv")
         if not os.path.exists(path):
             return -1, -1
-        data = pd.read_csv(path, low_memory=False).fillna(-1)
+        if optimized == 1:
+            data = load_parquet_cached(path, 'EVE')
+        else:
+            data = pd.read_csv(path, low_memory=False).fillna(-1)
         references = mutation.ref_seqs.values()  # usually will be of size 1
         for reference in references:
             if len(reference) < REF_SEQ_PADDING * 2:  # skip if red seq is too short
@@ -221,7 +261,7 @@ class ProteinAnalyzer:
                 return eve_variant.iloc[0][EVE_SCORE_COLUMN], eve_variant.iloc[0][EVE_PREDICTION_COLUMN]
         return -1, -1
 
-    def score_mutation_eve_impute(self, mut, offset=0, gz=True):
+    def score_mutation_eve_impute(self, mut, offset=0, gz=True, optimized=0):
         """
         :param mut: Mutation object
         :return: float CPT imputed score -1 if not found
@@ -246,7 +286,7 @@ class ProteinAnalyzer:
                 if score != -1: return score, 'cpt_exgene'
         return -1, 'not_found'
 
-    def _eve_cpt_interperter(self, mut, entry_name, ingene, offset, gz=True):
+    def _eve_cpt_interperter(self, mut, entry_name, ingene, offset, gz=True, optimized=0):
         """
         :param mut: Mutation object
         :param entry_name: Uniprot entery name
@@ -310,17 +350,20 @@ class ProteinAnalyzer:
         variant = f"{mutation.origAA}{variant_location}{mutation.changeAA}"
         index = uid_index if uid_index is not None else self.af_index
         uids = [main_uid] + reviewed_uids if use_alias else [main_uid]
+        uids = sorted(uids)
+        # print(f"uids = {uids}")
         for uid in uids:
             if uid in index:
                 idx_from = self.af_index[uid]
                 idx_to = self.af_ranges[str(idx_from)]
-                score = self._afm_score_from_uid(variant, idx_from, idx_to, chunk)
+                score = self._afm_score_from_uid(uid, variant, idx_from, idx_to, chunk)
                 if score is not None:
+                    # print(f"uid = {uid} score={score}")
                     return score
         # score not found
         return None
 
-    def score_mutation_esm1b_precomputed(self, mut, offset=0):
+    def score_mutation_esm1b_precomputed(self, mut, offset=0, optimized=0):
         """
         :param mut: Mutation object
         :param offset: int offset to mutation index
@@ -333,7 +376,7 @@ class ProteinAnalyzer:
         #  case 1 reference name found in ESM records
         if entry_name in self.esm_index:
             search_name = self.esm_index[entry_name]
-            score, score_type = self._esm_interperter(mut, search_name, offset)
+            score, score_type = self._esm_interperter(mut, search_name, offset, optimized=optimized)
             if score is not None:
                 return score, score_type
         #  case 2 expend search to all known protein references
@@ -343,7 +386,7 @@ class ProteinAnalyzer:
             entry_name = name_for_esm(entry_name)
             if entry_name in self.esm_index:
                 search_name = self.esm_index[entry_name]
-                score, score_type = self._esm_interperter(mut, search_name, offset, use_ref_seq=True)
+                score, score_type = self._esm_interperter(mut, search_name, offset, use_ref_seq=True, optimized=optimized)
                 if score is not None:
                     if score_type == 'direct':
                         return score, score_type
@@ -429,10 +472,13 @@ class ProteinAnalyzer:
         return logits[mut_idx][AA_ESM_LOC[mut.changeAA]] - logits[mut_idx][AA_ESM_LOC[mut.origAA]], log
 
     @staticmethod
-    def _esm_interperter(mut, search_name, offset, use_ref_seq=False):
+    def _esm_interperter(mut, search_name, offset, use_ref_seq=False, optimized=0):
         file_path = pjoin(ESM_VARIANTS_PATH, search_name + ESM_FILE_SUFFIX)
         column = f"{mut.origAA} {mut.loc - offset}"
-        data = pd.read_csv(file_path)
+        if optimized == 1:
+            data  = load_parquet_cached(file_path, 'ESM')
+        else:
+            data = pd.read_csv(file_path)
         assert mut.changeAA in A_A, f'invalid Amino Acid symbol {mut.long_name}'
         if mut.changeAA == 'X':  # invalid change
             return None, None
@@ -453,7 +499,7 @@ class ProteinAnalyzer:
         return None, None
 
     @staticmethod
-    def _afm_score_from_uid(variant, idx_from, idx_to, chunk=None):
+    def _afm_score_from_uid(uid, variant, idx_from, idx_to, chunk=None):
         """
         extract alpha Missense score from raw data if not found returns -1
         :param variant: str protein variant in formal [AA][location][AA]
@@ -464,5 +510,7 @@ class ProteinAnalyzer:
         :return:
         """
         data = afm_range_read(idx_from, idx_to) if chunk is None else chunk
-        score = data[data['protein_variant'] == variant]['am_pathogenicity']
+        score = data[(data['protein_variant'] == variant) & (data['uniprot_id'] == uid)]['am_pathogenicity']
+        # if not score.empty:
+        #     print(data[data['protein_variant'] == variant])
         return float(score.iloc[0]) if not score.empty else None

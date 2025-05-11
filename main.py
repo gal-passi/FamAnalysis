@@ -14,7 +14,11 @@ from definitions import *
 import glob
 from math import ceil
 import numpy as np
+import shutil
 
+def protein_names():
+    protein_names = [os.path.basename(path) for path in glob.glob(os.path.join(PROTEIN_PATH, '*'))]
+    return protein_names
 
 def all_proteins():
     """
@@ -142,7 +146,14 @@ def create_parser():
         help="recalculate scores for all mutations including those with existing score \n"
              "1 - recalc, 0 - calculate only missing scores",
     )
-
+    parser.add_argument(
+        "--optimized",
+        type=int,
+        default=0,
+        choices=[0, 1],
+        help="Use optimized version for the method if available \n"
+             "1 - uses optimized version of the algorithms if available, 0 - uses conventional version",
+    )
     parser.add_argument(
         "--use-cpt", "--cpt",
         type=int,
@@ -213,6 +224,8 @@ def create_parser():
         default="masked_marginals",
         help="scoring method for esm model inference",
     )
+
+    parser.add_argument("--task_id", type=int, required=False, help="Slurm array task ID")
     return parser
 
 
@@ -332,7 +345,7 @@ def calc_mutations_afm_scores(args, analyzer, chunk=None, iter_desc='', use_alia
     return successful
 
 
-def calc_mutations_eve_scores(args, analyzer, recalc=False, iter_desc='', impute=True):
+def calc_mutations_eve_scores(args, analyzer, recalc=False, iter_desc='', impute=True, optimized=0):
     """
     :param args:
     :param analyzer: ProteinAnalyzer object
@@ -351,7 +364,7 @@ def calc_mutations_eve_scores(args, analyzer, recalc=False, iter_desc='', impute
     total_tasks = len(tasks)
     for mutation in tqdm.tqdm(tasks, desc=iter_desc, total=len(tasks)):
         print_if(args.verbose, VERBOSE['thread_progress'], f"Calculating EVEModel scores for {mutation.long_name}")
-        score, prediction = analyzer.score_mutation_evemodel(protein=mutation.protein, mutation=mutation)
+        score, prediction = analyzer.score_mutation_evemodel(protein=mutation.protein, mutation=mutation, optimized=optimized)
         if score != -1:
             successful += 1
             mutation.update_score('EVE', score, eve_type='EVEmodel')
@@ -364,7 +377,7 @@ def calc_mutations_eve_scores(args, analyzer, recalc=False, iter_desc='', impute
             tasks = [mut for mut in all_mutations() if not mut.has_eve]
         for mutation in tqdm.tqdm(tasks, desc=iter_desc, total=len(tasks)):
             print_if(args.verbose, VERBOSE['thread_progress'], f"Calculating CPT scores for {mutation.long_name}")
-            score, eve_type = analyzer.score_mutation_eve_impute(mut=mutation, offset=args.offset, gz=True)
+            score, eve_type = analyzer.score_mutation_eve_impute(mut=mutation, offset=args.offset, gz=True, optimized=optimized)
             if score != -1:
                 successful += 1
                 mutation.update_score('EVE', score, eve_type=eve_type)
@@ -372,7 +385,7 @@ def calc_mutations_eve_scores(args, analyzer, recalc=False, iter_desc='', impute
     return successful
 
 
-def calc_mutations_esm_scores(args, analyzer, recalc=False, iter_desc='', inference=False, method='masked_marginals'):
+def calc_mutations_esm_scores(args, analyzer, recalc=False, iter_desc='', inference=False, method='masked_marginals', optimized=0):
     """
     :param args:
     :param analyzer: ProteinAnalyzer object
@@ -398,7 +411,7 @@ def calc_mutations_esm_scores(args, analyzer, recalc=False, iter_desc='', infere
             score, score_type = analyzer.score_mutation_esm_inference(model=model, alphabet=alphabet, mut=mutation,
                                                                       method=method, offset=args.offset, log='infer\t')
         else:
-            score, score_type = analyzer.score_mutation_esm1b_precomputed(mut=mutation, offset=args.offset)
+            score, score_type = analyzer.score_mutation_esm1b_precomputed(mut=mutation, offset=args.offset, optimized=optimized)
         if score is not None:
             successful += 1
             mutation.update_score('ESM', score, esm_type=score_type)
@@ -430,6 +443,26 @@ def calc_mutations_dsrank(n_scores_thr):
     df.drop('n_scores', axis=1, inplace=True)
     return df
 
+def is_slurm_cluster():
+    return any(var.startswith("SLURM_") for var in os.environ) or shutil.which("sinfo") is not None
+
+def calc_mutations_esm3_scores_protein(args, prot_name, recalc):
+    analyzer = Analyze.ProteinAnalyzer()
+    token = args.token if args.token else HUGGINGFACE_TOKEN
+    model, tokenizer = esm3_setup(model_name=ESM3_MODEL, token=token)
+    prot = Protein(ref_name=prot_name)
+    if recalc:
+        tasks = [mut for mut in prot.generate_mutations()]
+    else:
+        tasks = [mut for mut in prot.generate_mutations() if not mut.has_esm3]
+    total_tasks, successful = len(tasks), 0
+    for mutation in tqdm.tqdm(tasks, total=len(tasks)):
+        score, log = analyzer.score_mutation_esm3(model=model, tokenizer=tokenizer, mut=mutation)
+        if score is not None:
+            successful += 1
+            mutation.update_score('ESM3', float(score), esm_type=log)
+    return successful
+
 
 def calc_mutations_esm3_scores(args, analyzer, recalc):
     print_if(args.verbose, VERBOSE['program_progress'], f"Model inference performed on {DEVICE}")
@@ -448,7 +481,6 @@ def calc_mutations_esm3_scores(args, analyzer, recalc):
         if score is not None:
             successful += 1
             mutation.update_score('ESM3', float(score), esm_type=log)
-
 
 def main(args):
     workers = args.workers if args.workers else cpu_count()
@@ -482,14 +514,28 @@ def main(args):
             print_if(args.verbose, VERBOSE['program_progress'], f"done, scored {total_scores} of {n_muts} mutations")
         if action == 'score-EVE':
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating EVEmodel scores...")
-            calc_mutations_eve_scores(args, analyzer, recalc=args.recalc, impute=args.use_cpt)
+            calc_mutations_eve_scores(args, analyzer, recalc=args.recalc, impute=args.use_cpt, optimized=args.optimized)
         if (action == 'score-ESM') or (action =='score-ESM1b'):
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating ESM-1b scores...")
             calc_mutations_esm_scores(args, analyzer, recalc=args.recalc, inference=args.esm_inference,
-                                      method=args.scoring_method)
+                                      method=args.scoring_method, optimized=args.optimized)
         if action =='score-ESM3':
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating ESM-3 scores...")
-            calc_mutations_esm3_scores(args, analyzer, recalc=args.recalc)
+            if is_slurm_cluster():
+                if args.optimized == 0:
+                    calc_mutations_esm3_scores(args, analyzer, recalc=args.recalc)
+                else:
+                    proteins = protein_names()
+                    if args.task_id <= len(proteins):
+                        prot_name = proteins[args.task_id - 1]
+                        print(f"Processing {args.task_id}: {prot_name}")
+                        calc_mutations_esm3_scores_protein(args=args, prot_name=prot_name, recalc=args.recalc)
+                    else:
+                        print(f"Task ID {args.task_id} exceeds available protein count ({len(proteins)}). Skipping.")
+            else:
+                calc_mutations_esm3_scores(args, analyzer, recalc=args.recalc)
+
+
         if action == 'rank-DS':
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating Dataset Rank values...")
             return calc_mutations_dsrank(args.ds_thr)
