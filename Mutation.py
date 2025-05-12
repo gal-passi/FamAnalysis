@@ -33,7 +33,9 @@ class Mutation:
         self._manual_ref = None
         self._pdbs = None  # initialized only upon request
         self._chr, self._start, self._end, self._orig_NA, self._change_NA = 0, 0, 0, None, None
+        self._families, self._patients = set(), set()
         self._interface = {}
+
         self._v = verbose_level
         if not protein or not full_desc:
             raise ValueError("Usage: Mutation(full_desc, protein_name)")
@@ -106,7 +108,7 @@ class Mutation:
                 'change': self._change, 'location': self._loc, 'full_desc': self._full_desc,
                 'chr': self._chr, 'start': self._start, 'end': self._end,
                 'orig_NA': self._orig_NA, 'change_NA': self._change_NA, 'manual_ref': self._manual_ref,
-                'interface': self._interface}
+                'interface': self._interface, 'patients': self._patients, 'families': self._families}
         with open(path, "wb") as file:
             pickle.dump(data, file)
 
@@ -192,6 +194,30 @@ class Mutation:
         if self._manual_ref:
             self._ref_sequences['manual_ref'] = self._manual_ref
         return self._ref_sequences
+
+    @property
+    def families(self):
+        return self._families
+
+    @property
+    def patients(self):
+        return self._patients
+
+    def add_members(self, ids, add_to):
+        """
+        adds members to families or patients
+        :id: str | set
+        :add_to: str in ['f' | 'p' | 'families' | 'patients']
+        :return: None
+        """
+        if add_to not in ['f', 'p', 'families', 'patients']:
+            raise TypeError
+        data = self._families if add_to in ['f', 'families'] else self._patients
+        if isinstance(ids, str):
+            data.add(ids)
+        elif isinstance(ids, set):
+            data |= ids
+        self._save_obj(self._directory)
 
     def set_ref_seqs_len(self, n):
         """

@@ -139,6 +139,22 @@ def create_parser():
     )
 
     parser.add_argument(
+        "--ncbi-col",
+        type=str,
+        default="NCBI",
+        help="column name holding the variant ncbi transcript (protein) id i.e. NM_[]",
+    )
+
+    parser.add_argument(
+        "--use-ncbi",
+        type=int,
+        default=1,
+        choices=[0, 1],
+        help="bool should NCBI_ID be used to obtain protein isoforms\n"
+             "1 - use NCBI_ID, 0 - do not use NCBI_ID",
+    )
+
+    parser.add_argument(
         "--recalc",
         type=int,
         default=0,
@@ -243,13 +259,14 @@ def create_new_records(args, *rowiters):
     created_protein = None
     for idx, row in rowiter:
         gene = row[args.protein_col]
+        ncbi_id = row[args.ncbi_col] if args.use_ncbi else ''
         if gene in REMOVED_PROTEINS:
             continue
         mut_desc = row[args.variant_col]
         dna = {'chr': row[args.chromosome_col], 'start': row[args.dna_start_col], 'end': row[args.dna_end_col],
                'ref_na': row[args.wt_col], 'alt_na': row[args.alt_col]}
         try:
-            protein = Protein(ref_name=gene, verbose_level=args.verbose) if not created_protein else created_protein
+            protein = Protein(ref_name=gene, ncbi=ncbi_id, verbose_level=args.verbose) if not created_protein else created_protein
             created_protein = protein
             protein.add_mut(mut_desc, dna)
         except TimeoutError:

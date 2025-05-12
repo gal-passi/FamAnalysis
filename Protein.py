@@ -4,8 +4,9 @@ import pickle
 import re
 from datetime import datetime
 import Mutation
-import Analyze
+import Connections
 from Connections import Uniport
+from Connections import EntrezApi as entrez
 from definitions import *
 from utils import print_if, warn_if
 from copy import deepcopy
@@ -23,35 +24,20 @@ class Protein:
     REF_SEQ = "reference.txt"
     BACKUP_PATH = "backup.txt"
 
-    def __init__(self, free_text='', ref_name='', uniport_id="", ncbi="", load_only=False, verbose_level=1):
+    def __init__(self, ref_name='', uniport_id="", ncbi="", load_only=False, verbose_level=1):
         """
         Constructor for Protein Class. Must either contain free_text or ref_name
-        :param free_text: optional initialization using free text i.e. LRRK2:NM_198578.1:exon48:c.G7134C:p.K2378N
         :param ref_name: optional initializor using protein ref name i.e. LRRK2
         :param uniport_id: str optional uniport id / primary accession. if not given the id will be extracted using the protein ref name
-        :param ncbi: int optional ncbi id if not given the id will be extracted using the protein ref name
+        :param ncbi: if given will augment protein isoforms with the isoforms matching the id str | int
         :param add_mut: bool if set to true the mutation in the free text will be added to the protein's mutations dict
         """
-        if (not free_text) and (not ref_name) and (not uniport_id):
+        if (not ref_name) and (not uniport_id):
             raise ValueError("ERROR: Class initialization must contain either protein reference name "
-                             "or free description text or uniprot id \n" "USAGE: Protein('CUL7') | "
-                             "Protein('CUL7:NM_001168370:exon25:c.G4970A:p.R1657Q') | Protein(uniprot_id = Q14999)")
+                             "or uniprot id \n" "USAGE: Protein('CUL7') | Protein(uniprot_id = Q14999)")
         self._v = verbose_level
         self._unip = Uniport(verbose_level=verbose_level)
-        if free_text != '':
-            data = re.search(rf'([A-Z\d]*):(NM_[\d]*)[\.]?[\d]*:', free_text)
-            ref_name = data.group(1) if data is not None else ref_name
-            if ncbi != "":
-                ncbi = ncbi
-            elif data is not None:
-                ncbi = data.group(2)
-            else:
-                ncbi = ""
-
-        if (not ref_name) and (not uniport_id):
-            raise ValueError("ERROR: Unable to extract protein reference name, check input\n"
-                             "USAGE: Protein('CUL7') | Protein('CUL7:NM_001168370:exon25:c.G4970A:p.R1657Q')")
-        self.ncbi_id = ncbi
+        self.ncbi_id = ncbi if ncbi else None
         ref_name = PROTEIN_ALIASES[ref_name] if ref_name in PROTEIN_ALIASES else ref_name
         self._name = uniport_id if not ref_name else ref_name
         self.directory = os.path.join(PROTEIN_PATH, self._name)
@@ -218,13 +204,11 @@ class Protein:
 
         isoforms = self._unip.fetch_uniport_sequences(self.Uid)
         alphafold_seq = self._unip.alpha_seq(self)
-        # deprecated ncbi
-        # ncbi = {} if not self.ncbi_id else self._unip.fatch_all_NCBIs(self.ncbi_id)
-        isoforms = {**isoforms, **alphafold_seq}
+        ncbi = {} if not self.ncbi_id else entrez().fetch_NCBI_seq(self.ncbi_id)
+        isoforms = {**isoforms, **alphafold_seq, **ncbi}
         self.isoforms = isoforms
         with open(os.path.join(self.directory, self.ISOFORMS), "w") as file:
             file.write(json.dumps(isoforms))
-
         pdbs = self._unip.fetch_pdbs(prot=self)
         self.pdbs = pdbs
         with open(os.path.join(self.directory, self.PDBS), "w") as file:
