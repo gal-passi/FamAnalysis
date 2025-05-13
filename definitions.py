@@ -28,9 +28,9 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 ROOT_DIR = dirname(abspath(__file__))
 DB = 'DB'
 DB_PATH = pjoin(ROOT_DIR, DB)
-PROTEINS = 'proteins_30_fams'
+PROTEINS = 'proteins'
 PROTEIN_PATH = pjoin(DB_PATH, PROTEINS)
-MUTATIONS = 'mutations_30_fams'
+MUTATIONS = 'mutations'
 MUTATION_PATH = pjoin(DB_PATH, MUTATIONS)
 AFM_PATH = pjoin(DB_PATH, 'AFM')
 EVE_PATH = pjoin(DB_PATH, 'EVE')

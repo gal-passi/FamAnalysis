@@ -300,12 +300,25 @@ class EntrezApi:
         web_env, query_key = keys
         return self._seq_from_keys(id=entrez_id, web_env=web_env, query_key=query_key, seq_type=seq_type)
 
-    def fetch_NCBI_seq(self, ncbi_id):
+    def fetch_NCBI_sequences(self, ncbi_ids):
+        """
+        fetches amino acid sequence from multip[le ncbi ids
+        :param ncbi_ids: str (format NM_001282166.1) | iterable
+        :return: {ncbi_id : sequence}
+        """
+        ncbi_ids = [ncbi_ids] if isinstance(ncbi_ids, str) else ncbi_ids
+        all_seqs = {}
+        for ncbi_id in ncbi_ids:
+            all_seqs |= self._fetch_NCBI_seq(ncbi_id)
+        return all_seqs
+
+    def _fetch_NCBI_seq(self, ncbi_id):
         """
         fetches amino acid sequence from ncbi
         :param ncbi_id: str (format NM_001282166.1)
         :return: {ncbi_id : sequence}
         """
+
         print_if(self._v, VERBOSE['thread_progress'], f"Retrieving isoform {ncbi_id} from NCBI...")
         try:
             handle = Entrez.efetch(db="nucleotide", id=ncbi_id, retmode="xml")
@@ -334,7 +347,7 @@ def fatch_all_NCBIs(self, ncbi_id):
     idx = 0
     united = {}
     while True:
-        record = self.fetch_NCBI_seq(ncbi_id + f".{idx}")
+        record = self._fetch_NCBI_seq(ncbi_id + f".{idx}")
         if (len(record) == 0) and (idx > 0):
             return united
         united = {**united, **record}

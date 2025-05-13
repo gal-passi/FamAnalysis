@@ -173,3 +173,5 @@ results*
 test_data.csv
 
 afm_partitions/*
+/Family.py
+/Patient.py

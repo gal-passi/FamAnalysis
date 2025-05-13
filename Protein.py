@@ -29,7 +29,7 @@ class Protein:
         Constructor for Protein Class. Must either contain free_text or ref_name
         :param ref_name: optional initializor using protein ref name i.e. LRRK2
         :param uniport_id: str optional uniport id / primary accession. if not given the id will be extracted using the protein ref name
-        :param ncbi: if given will augment protein isoforms with the isoforms matching the id str | int
+        :param ncbi: if given will augment protein isoforms with the isoforms matching the id str | set | list
         :param add_mut: bool if set to true the mutation in the free text will be added to the protein's mutations dict
         """
         if (not ref_name) and (not uniport_id):
@@ -37,7 +37,13 @@ class Protein:
                              "or uniprot id \n" "USAGE: Protein('CUL7') | Protein(uniprot_id = Q14999)")
         self._v = verbose_level
         self._unip = Uniport(verbose_level=verbose_level)
-        self.ncbi_id = ncbi if ncbi else None
+        self._ncbi_ids = set()
+        if isinstance(ncbi, set):
+            self._ncbi_ids |= ncbi
+        elif isinstance(ncbi, list):
+            self._ncbi_ids |= set(ncbi)
+        elif isinstance(ncbi, str) and ncbi:
+            self._ncbi_ids.add(ncbi)
         ref_name = PROTEIN_ALIASES[ref_name] if ref_name in PROTEIN_ALIASES else ref_name
         self._name = uniport_id if not ref_name else ref_name
         self.directory = os.path.join(PROTEIN_PATH, self._name)
@@ -191,7 +197,7 @@ class Protein:
         if uniprot_id and (uniprot_id not in uids['reviewed']):
             uids['reviewed'].append(uniprot_id)
         self._Uids = uids
-        if self.Uid == '' and not self.ncbi_id:
+        if self.Uid == '' and not self._ncbi_ids:
             raise NameError(f'Unable to find uniport id for protein {self._name}\n'
                             f'Protein will not be created')
         try:
@@ -204,7 +210,7 @@ class Protein:
 
         isoforms = self._unip.fetch_uniport_sequences(self.Uid)
         alphafold_seq = self._unip.alpha_seq(self)
-        ncbi = {} if not self.ncbi_id else entrez().fetch_NCBI_seq(self.ncbi_id)
+        ncbi = {} if not self.ncbi_ids else entrez().fetch_NCBI_sequences(self.ncbi_ids)
         isoforms = {**isoforms, **alphafold_seq, **ncbi}
         self.isoforms = isoforms
         with open(os.path.join(self.directory, self.ISOFORMS), "w") as file:
