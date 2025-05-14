@@ -251,6 +251,21 @@ class Protein:
             str_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
             file.write(f"changed {to_update} on {str_time}. Erased: \n {backup} \n")
 
+    def add_isoform(self, id, dataset):
+        """
+        :param id: str
+        :param dataset: str either ncbi | uniprot
+        :return:
+        """
+        if not isinstance(id, str) or not dataset in ['ncbi', 'uniprot']:
+            raise ValueError
+        if dataset == 'ncbi':
+            self.isoforms |= entrez().fetch_NCBI_sequences(id)
+        elif dataset == 'uniprot':
+            self.isoforms |= self._unip.fetch_uniport_sequences(id)
+        self._update_DB(os.path.join(self.directory, self.ISOFORMS), self.isoforms, mode='json')
+        return self.reload()
+
     def add_mut(self, description, dna_data={}):
         """
         adds mutation to protein DB

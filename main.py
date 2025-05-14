@@ -9,7 +9,7 @@ from multiprocessing.pool import ThreadPool as Pool
 import tqdm
 from functools import partial
 from utils import print_if, adaptive_chunksize, afm_iterator, warn_if, summary_df, \
-    esm3_setup, esm_setup
+    esm3_setup, esm_setup, esm_seq_logits
 from definitions import *
 import glob
 from math import ceil
@@ -268,6 +268,9 @@ def create_new_records(args, *rowiters):
         try:
             protein = Protein(ref_name=gene, ncbi=ncbi_id, verbose_level=args.verbose) if not created_protein else created_protein
             created_protein = protein
+            #  same protein may have multiple ncbi ids
+            if ncbi_id not in created_protein.isoforms:
+                created_protein = created_protein.add_isoform(ncbi_id, 'ncbi')
             protein.add_mut(mut_desc, dna)
         except TimeoutError:
             print_if(args.verbose, VERBOSE['thread_warnings'], f"skipped {gene} due to timeout")
