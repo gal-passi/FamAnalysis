@@ -107,7 +107,7 @@ class Protein:
     @property
     def aliases(self):
         ret = set(self._Uids['aliases'])
-        ret.remove('')
+        ret = ret - {''}  # remove empty strings
         return ret
 
     def entry_name(self, all=False):
