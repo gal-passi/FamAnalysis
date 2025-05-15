@@ -271,19 +271,19 @@ class ProteinAnalyzer:
         #  case 1 reference name found in CPT records
         if entry_name in self._cpt_ingene:
             score = self._eve_cpt_interperter(mut, entry_name, offset=offset, ingene=True, gz=gz)
-            if score != -1: return score, 'cpt_ingene'
+            if score != -1 and pd.notna(score): return score, 'cpt_ingene'
         if entry_name in self._cpt_exgene:
             score = self._eve_cpt_interperter(mut, entry_name, offset=offset, ingene=False, gz=gz)
-            if score != -1: return score, 'cpt_exgene'
+            if score != -1 and pd.notna(score): return score, 'cpt_exgene'
         #  case 2 expend search to all known protein references
         for name in mut.protein.aliases:
             entry_name = name_for_cpt(name)
             if entry_name in self._cpt_ingene:
                 score = self._eve_cpt_interperter(mut, entry_name, offset=offset, ingene=True, gz=gz)
-                if score != -1: return score, 'cpt_ingene'
+                if score != -1 and pd.notna(score): return score, 'cpt_ingene'
             if entry_name in self._cpt_exgene:
                 score = self._eve_cpt_interperter(mut, entry_name, offset=offset, ingene=False, gz=gz)
-                if score != -1: return score, 'cpt_exgene'
+                if score != -1 and pd.notna(score): return score, 'cpt_exgene'
         return -1, 'not_found'
 
     def _eve_cpt_interperter(self, mut, entry_name, ingene, offset, gz=True, optimized=0):
@@ -314,7 +314,7 @@ class ProteinAnalyzer:
             cpt_seq = sequence_from_cpt_df(df)
             references = mut.ref_seqs.values()  # usually will be of size 1
             for ref_seq in references:
-                if len(ref_seq) < REF_SEQ_PADDING*2:  # skip if red seq is too short
+                if len(ref_seq) < REF_SEQ_PADDING*2:  # skip if ref seq is too short
                     continue
                 row_idx = seacrh_by_ref_seq(main_seq=cpt_seq, ref_seq=ref_seq)
                 if row_idx == -1:
@@ -332,8 +332,8 @@ class ProteinAnalyzer:
 
     def score_mutation_afm(self, mutation, chunk=None, uid_index=None, offset=0, use_alias=False):
         """
-        tries to give scores for mutation using AlphaMissense
-        will search main Uniprot entry and if not found all reviewed entries
+        Scores mutation using AlphaMissense
+        Searches main Uniprot entry and if not found all reviewed entries
 
         :param mutation: Mutation object
         :param offset: int offset for mutation index
@@ -351,14 +351,12 @@ class ProteinAnalyzer:
         index = uid_index if uid_index is not None else self.af_index
         uids = [main_uid] + reviewed_uids if use_alias else [main_uid]
         uids = sorted(uids)
-        # print(f"uids = {uids}")
         for uid in uids:
             if uid in index:
                 idx_from = self.af_index[uid]
                 idx_to = self.af_ranges[str(idx_from)]
                 score = self._afm_score_from_uid(uid, variant, idx_from, idx_to, chunk)
                 if score is not None:
-                    # print(f"uid = {uid} score={score}")
                     return score
         # score not found
         return None
@@ -434,6 +432,7 @@ class ProteinAnalyzer:
         logits = esm_seq_logits(model=model, tokens=batch_tokens, log=True, softmax=True, return_device='cpu', esm_version=1)
         # use masked marginals score
         return float(logits[mut_idx][AA_ESM_LOC[mut.changeAA]] - logits[mut_idx][AA_ESM_LOC[mut.origAA]]), log
+
 
     @staticmethod
     def score_mutation_esm3(model, tokenizer, mut, method='masked_marginals', offset=1, log=''):

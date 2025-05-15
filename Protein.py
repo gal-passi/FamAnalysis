@@ -4,7 +4,6 @@ import pickle
 import re
 from datetime import datetime
 import Mutation
-import Connections
 from Connections import Uniport
 from Connections import EntrezApi as entrez
 from definitions import *
@@ -107,7 +106,9 @@ class Protein:
 
     @property
     def aliases(self):
-        return self._Uids['aliases']
+        ret = set(self._Uids['aliases'])
+        ret.remove('')
+        return ret
 
     def entry_name(self, all=False):
         """

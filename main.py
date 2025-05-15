@@ -463,8 +463,10 @@ def calc_mutations_dsrank(n_scores_thr):
     df.drop('n_scores', axis=1, inplace=True)
     return df
 
+
 def is_slurm_cluster():
     return any(var.startswith("SLURM_") for var in os.environ) or shutil.which("sinfo") is not None
+
 
 def calc_mutations_esm3_scores_protein(args, prot_name, recalc):
     analyzer = Analyze.ProteinAnalyzer()
