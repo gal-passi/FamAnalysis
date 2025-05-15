@@ -271,19 +271,19 @@ class ProteinAnalyzer:
         #  case 1 reference name found in CPT records
         if entry_name in self._cpt_ingene:
             score = self._eve_cpt_interperter(mut, entry_name, offset=offset, ingene=True, gz=gz)
-            if score != -1 and pd.notna(score): return score, 'cpt_ingene'
+            if score != -1: return score, 'cpt_ingene'
         if entry_name in self._cpt_exgene:
             score = self._eve_cpt_interperter(mut, entry_name, offset=offset, ingene=False, gz=gz)
-            if score != -1 and pd.notna(score): return score, 'cpt_exgene'
+            if score != -1: return score, 'cpt_exgene'
         #  case 2 expend search to all known protein references
         for name in mut.protein.aliases:
             entry_name = name_for_cpt(name)
             if entry_name in self._cpt_ingene:
                 score = self._eve_cpt_interperter(mut, entry_name, offset=offset, ingene=True, gz=gz)
-                if score != -1 and pd.notna(score): return score, 'cpt_ingene'
+                if score != -1: return score, 'cpt_ingene'
             if entry_name in self._cpt_exgene:
                 score = self._eve_cpt_interperter(mut, entry_name, offset=offset, ingene=False, gz=gz)
-                if score != -1 and pd.notna(score): return score, 'cpt_exgene'
+                if score != -1: return score, 'cpt_exgene'
         return -1, 'not_found'
 
     def _eve_cpt_interperter(self, mut, entry_name, ingene, offset, gz=True, optimized=0):
@@ -307,7 +307,7 @@ class ProteinAnalyzer:
             df = pd.read_csv(path)
 
         direct_search = df[df[CPT_MUTATION_COLUMN] == desc][CPT_SCORE_COLUMN]
-        if len(direct_search) > 0:
+        if len(direct_search) > 0 and pd.notna(direct_search.iloc[0]):
             return float(direct_search.iloc[0])
         # mutation not found use reference sequence
         else:
@@ -327,8 +327,9 @@ class ProteinAnalyzer:
                         warn_if(2, VERBOSE['thread_warnings'],
                                 f"error with CPT search by reference, in {mut.long_name} skipping...")
                         continue
-                    else:
+                    elif pd.notna(cpt_variant.iloc[0][CPT_SCORE_COLUMN]):
                         return float(cpt_variant.iloc[0][CPT_SCORE_COLUMN])
+            return -1
 
     def score_mutation_afm(self, mutation, chunk=None, uid_index=None, offset=0, use_alias=False):
         """
