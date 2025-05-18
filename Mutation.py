@@ -416,6 +416,10 @@ class Mutation:
             return ''
 
     @property
+    def afm_type(self):
+        return self._protein.muts[self.extended_description][AFM_TYPE]
+
+    @property
     def firm_score(self):
         '''
         This method was deprecated - FIRM is no longer supported
@@ -538,7 +542,7 @@ class Mutation:
             for pdb, _ in pdbs:
                 self._unip.download_pdb(pdb, path)
 
-    def update_score(self, model, score, eve_type='', esm_type=''):
+    def update_score(self, model, score, eve_type='', esm_type='', afm_type=''):
         """
         updates mutation model scores
         :param model: str one of: EVE | ESM | AFM | DS | ESM3
@@ -557,6 +561,8 @@ class Mutation:
             prot.muts[self.extended_description][MODELS_SCORES['ESM_METHOD']] = esm_type
         if model == 'ESM3' and esm_type:
             prot.muts[self.extended_description][MODELS_SCORES['ESM3_METHOD']] = esm_type
+        if model == 'AFM' and afm_type:
+            prot.muts[self.extended_description][MODELS_SCORES['AFM_METHOD']] = afm_type
         prot._update_DB(pjoin(prot.directory, prot.MUTS), prot.muts, mode='pickle')
 
     def esm_scores_from_inference(self, how='all'):
@@ -599,6 +605,6 @@ class Mutation:
         ds_rank = self.ds_rank if self.ds_rank is not None else -1
         if include_status:
             return [self.protein_name, self.name, self.eve_score, self.eve_type, esm_score,
-                    self.esm_type, esm3_score, self.esm3_type, afm_score, ds_rank]
+                    self.esm_type, esm3_score, self.esm3_type, afm_score, self.afm_type, ds_rank]
         else:
             return [self.protein_name, self.name, self.eve_score, esm_score, esm3_score, afm_score, ds_rank]

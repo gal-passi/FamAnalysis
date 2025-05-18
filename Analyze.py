@@ -11,10 +11,10 @@ import pickle
 from functools import lru_cache
 from pathlib import Path
 from utils import afm_range_read, name_for_esm, sequence_from_esm_df, name_for_cpt, \
-    sequence_from_cpt_df, seacrh_by_ref_seq, warn_if, esm_seq_logits, esm_process_long_sequences
+    sequence_from_cpt_df, seacrh_by_ref_seq, warn_if, esm_seq_logits, esm_process_long_sequences, \
+    sequence_from_afm_df
 import Connections
 from definitions import *
-
 
 ROOT = os.path.join(os.path.dirname(__file__))
 
@@ -39,12 +39,13 @@ def convert_csv_to_parquet(csv_path, model):
         df.to_parquet(parquet_path)
         print(f"Converted: {csv_path} → {parquet_path}")
 
-    return parquet_path  
+    return parquet_path
 
-@lru_cache(maxsize=200)  
+
+@lru_cache(maxsize=200)
 def load_parquet_cached(csv_path, model):
     """Loads a Parquet file from disk with LRU caching."""
-    parquet_path = convert_csv_to_parquet(csv_path, model) 
+    parquet_path = convert_csv_to_parquet(csv_path, model)
     if model == 'EVE':
         return pd.read_parquet(parquet_path).fillna(-1)
     elif model == 'ESM':
@@ -314,7 +315,7 @@ class ProteinAnalyzer:
             cpt_seq = sequence_from_cpt_df(df)
             references = mut.ref_seqs.values()  # usually will be of size 1
             for ref_seq in references:
-                if len(ref_seq) < REF_SEQ_PADDING*2:  # skip if ref seq is too short
+                if len(ref_seq) < REF_SEQ_PADDING * 2:  # skip if ref seq is too short
                     continue
                 row_idx = seacrh_by_ref_seq(main_seq=cpt_seq, ref_seq=ref_seq)
                 if row_idx == -1:
@@ -331,7 +332,8 @@ class ProteinAnalyzer:
                         return float(cpt_variant.iloc[0][CPT_SCORE_COLUMN])
             return -1
 
-    def score_mutation_afm(self, mutation, chunk=None, uid_index=None, offset=0, use_alias=False):
+    def score_mutation_afm(self, mutation, chunk=None, uid_index=None, explicitly_access=None, offset=0,
+                           use_alias=False):
         """
         Scores mutation using AlphaMissense
         Searches main Uniprot entry and if not found all reviewed entries
@@ -341,26 +343,39 @@ class ProteinAnalyzer:
         :param chunk: DataFrame - optional if given will search for the mutation in batch
                     instead of importing data from disk. Recommended when scoring multiple mutations.
         :param uid_index: optional set of uids in chunk, can reduce running time
+        :param explicitly_access: optional set of uids that should explicitly imported from the DB
         :return: float AlphaMissense score if found else -1
         """
         main_uid = mutation.protein.Uid
         reviewed_uids = mutation.protein.all_uids()['reviewed']
+        references = mutation.ref_seqs.values()
         if isinstance(reviewed_uids, str):
             reviewed_uids = [reviewed_uids]
         variant_location = mutation.loc + offset
         variant = f"{mutation.origAA}{variant_location}{mutation.changeAA}"
-        index = uid_index if uid_index is not None else self.af_index
+        index = uid_index if uid_index else self.af_index
+        explicitly_access = explicitly_access if explicitly_access else set()
         uids = [main_uid] + reviewed_uids if use_alias else [main_uid]
-        uids = sorted(uids)
+        main_uid_flag = True
         for uid in uids:
             if uid in index:
                 idx_from = self.af_index[uid]
                 idx_to = self.af_ranges[str(idx_from)]
-                score = self._afm_score_from_uid(uid, variant, idx_from, idx_to, chunk)
-                if score is not None:
-                    return score
+                if uid in explicitly_access:
+                    # used for sequences that spread over multiple chunks --> load ranges explicitly
+                    print('edge invoked!')
+                    score = self._afm_score_from_uid(uid, variant, idx_from, idx_to,
+                                                     mut_references=references, chunk=None)
+                else:
+                    score = self._afm_score_from_uid(uid, variant, idx_from, idx_to,
+                                                     mut_references=references, chunk=chunk)
+                if score is not None and main_uid_flag:
+                    return score, 'main_uid'
+                elif score is not None and not main_uid_flag:
+                    return score, 'alias'
+                main_uid_flag = False
         # score not found
-        return None
+        return None, NO_TYPE
 
     def score_mutation_esm1b_precomputed(self, mut, offset=0, optimized=0):
         """
@@ -385,7 +400,8 @@ class ProteinAnalyzer:
             entry_name = name_for_esm(entry_name)
             if entry_name in self.esm_index:
                 search_name = self.esm_index[entry_name]
-                score, score_type = self._esm_interperter(mut, search_name, offset, use_ref_seq=True, optimized=optimized)
+                score, score_type = self._esm_interperter(mut, search_name, offset, use_ref_seq=True,
+                                                          optimized=optimized)
                 if score is not None:
                     if score_type == 'direct':
                         return score, score_type
@@ -427,13 +443,13 @@ class ProteinAnalyzer:
         else:
             input_seq = sequence
         tokenizer = alphabet.get_batch_converter()
-        #tokens = torch.tensor(tokenized, dtype=torch.int64).unsqueeze(0).to(DEVICE)
+        # tokens = torch.tensor(tokenized, dtype=torch.int64).unsqueeze(0).to(DEVICE)
         _, _, batch_tokens = tokenizer([(mut.long_name, input_seq)])
         batch_tokens = batch_tokens.to(DEVICE)
-        logits = esm_seq_logits(model=model, tokens=batch_tokens, log=True, softmax=True, return_device='cpu', esm_version=1)
+        logits = esm_seq_logits(model=model, tokens=batch_tokens, log=True, softmax=True, return_device='cpu',
+                                esm_version=1)
         # use masked marginals score
         return float(logits[mut_idx][AA_ESM_LOC[mut.changeAA]] - logits[mut_idx][AA_ESM_LOC[mut.origAA]]), log
-
 
     @staticmethod
     def score_mutation_esm3(model, tokenizer, mut, method='masked_marginals', offset=1, log=''):
@@ -447,15 +463,15 @@ class ProteinAnalyzer:
         :return: tuple (float | None ESM3 masked marginal, str log)
         """
         if not mut.isoforms:
-            return None, log+'\tno_iso'
+            return None, log + '\tno_iso'
         mut_idx = mut.loc - offset
-        log = log+'\toriginal_sequence'
+        log = log + '\toriginal_sequence'
         #  choose sequence of minimal length
         sequence = mut.sequence(how='min')
         if len(sequence) > ESM_MAX_LENGTH:
             new_offset, sequence = esm_process_long_sequences(sequence, mut_idx)
             mut_idx = mut_idx - new_offset
-            log = log+'\ttrimmed_sequence'
+            log = log + '\ttrimmed_sequence'
         #  mask sequence
         assert sequence[mut_idx] == mut.origAA, 'sequence does not match wild-type AA - check offset'
         # wt_marginals is default
@@ -476,7 +492,7 @@ class ProteinAnalyzer:
         file_path = pjoin(ESM_VARIANTS_PATH, search_name + ESM_FILE_SUFFIX)
         column = f"{mut.origAA} {mut.loc - offset}"
         if optimized == 1:
-            data  = load_parquet_cached(file_path, 'ESM')
+            data = load_parquet_cached(file_path, 'ESM')
         else:
             data = pd.read_csv(file_path)
         assert mut.changeAA in A_A, f'invalid Amino Acid symbol {mut.long_name}'
@@ -498,19 +514,43 @@ class ProteinAnalyzer:
                 return float(column[row]), 'indirect'
         return None, None
 
-    @staticmethod
-    def _afm_score_from_uid(uid, variant, idx_from, idx_to, chunk=None):
+    def _afm_score_from_uid(self, uid, variant, idx_from, idx_to, mut_references=None, chunk=None):
         """
         extract alpha Missense score from raw data if not found returns -1
         :param variant: str protein variant in formal [AA][location][AA]
         :param idx_from: int
         :param idx_to: int
         :param v: DataFrame - optional if given will search for the mutation in batch
-                    instead of importing data from disk. Recommended when scoring multiple mutations.
+                instead of importing data from disk. Recommended when scoring multiple mutations.
         :return:
         """
         data = afm_range_read(idx_from, idx_to) if chunk is None else chunk
         score = data[(data['protein_variant'] == variant) & (data['uniprot_id'] == uid)]['am_pathogenicity']
-        # if not score.empty:
-        #     print(data[data['protein_variant'] == variant])
-        return float(score.iloc[0]) if not score.empty else None
+        if not score.empty:
+            return float(score.iloc[0])
+        # direct search failed --> try by reference
+        if mut_references:
+            record_data = chunk[chunk['uniprot_id'] == uid] if chunk is not None else data
+            afm_seq = sequence_from_afm_df(record_data)
+            if not afm_seq:
+                warn_if(2, VERBOSE['thread_warnings'], f'afm seq truncated {uid}')
+                return None
+            for ref_seq in mut_references:
+                if len(ref_seq) < REF_SEQ_PADDING * 2:  # skip if ref seq is too short
+                    continue
+                row_idx = seacrh_by_ref_seq(main_seq=afm_seq, ref_seq=ref_seq, n_aa=19)
+                if row_idx == -1:
+                    continue  # ref not found
+                else:
+                    #  ref seq found in data - search through correct substitution
+                    all_substitution = record_data[row_idx:row_idx + 19]
+                    afm_variant = all_substitution[all_substitution['protein_variant'].str.endswith(variant[-1])]
+                    if len(afm_variant) != 1:
+                        warn_if(2, VERBOSE['thread_warnings'],
+                                f"error with AFM search by reference, in {variant} skipping...")
+                        print(f'chunk: {chunk is not None}')
+                        record_data.to_csv(f'log_{variant}.csv')
+                        continue
+                    elif pd.notna(afm_variant.iloc[0]['am_pathogenicity']):
+                        return float(afm_variant.iloc[0]['am_pathogenicity'])
+        return None

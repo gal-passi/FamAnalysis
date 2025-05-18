@@ -247,11 +247,17 @@ def sequence_from_cpt_df(cpt_data):
     return ''.join([aa_change[0] for aa_change in cpt_data['mutant'][0::20]])
 
 
+def sequence_from_afm_df(afm_data):
+    if len(afm_data) % 19 != 0:  # sequence truncated
+        return ''
+    return ''.join([aa_change[0] for aa_change in afm_data['protein_variant'][0::19]])
+
+
 def protein_exists(ref_name):
     return ref_name in set(os.listdir('DB/proteins'))
 
 
-def seacrh_by_ref_seq(main_seq, ref_seq, padding=REF_SEQ_PADDING):
+def seacrh_by_ref_seq(main_seq, ref_seq, padding=REF_SEQ_PADDING, n_aa=20):
     """
     :return: index of start row of wt AA
     """
@@ -259,7 +265,7 @@ def seacrh_by_ref_seq(main_seq, ref_seq, padding=REF_SEQ_PADDING):
     if seq_start == -1:
         return -1
     aa_location = seq_start + padding
-    start_row_idx = aa_location * 20
+    start_row_idx = aa_location * n_aa
     return start_row_idx
 
 

@@ -147,13 +147,14 @@ ESM3_SCORE = 'esm3Score'
 ESM_TYPE = 'esmMethod'
 ESM3_TYPE = 'esm3Method'
 AFM_SCORE = 'afmScore'
+AFM_TYPE = 'afmMethod'
 EVE_TYPE = 'eveMethod'
 DS_RANK = 'DSRank'
 AVAILABLE_MODELS = {'EVE', 'ESM', 'AFM', 'ESM3', 'ESM1B', 'ESM1b'}
 AVAILABLE_SCORES = AVAILABLE_MODELS | {'DS'}
 MODELS_SCORES = {'EVE': EVE_SCORE, 'ESM': ESM_SCORE, 'ESM1B': ESM_SCORE, 'ESM1b': ESM_SCORE, 'ESM3': ESM3_SCORE,
                  'AFM': AFM_SCORE, 'FIRM': FIRM_SCORE, 'EVE_METHOD': EVE_TYPE, 'ESM_METHOD': ESM_TYPE, 'DS': DS_RANK,
-                 'ESM3_METHOD': ESM3_TYPE, 'ESM1b_METHOD': ESM_TYPE, 'ESM_METHOD1B': ESM_TYPE}
+                 'ESM3_METHOD': ESM3_TYPE, 'ESM1b_METHOD': ESM_TYPE, 'ESM_METHOD1B': ESM_TYPE, 'AFM_METHOD': AFM_TYPE}
 NO_SCORE = -1.0
 NO_TYPE = 'no_score'
 
@@ -172,9 +173,9 @@ PROTEIN_FREE_TEXT_INITIALIZATION_RE = rf'([A-Z\d]*):(NM_[\d]*)[\.]?[\d]*:'
 
 MUTATION_REGEX = rf'p\.(?P<symbol>(?P<orig>[{A_A}]){{1}}(?P<location>[\d]+)(?P<change>[{A_A}]){{1}})'
 REF_SEQ_PADDING = 5
-NEW_MUTATION_DATA = {'chr': None, 'ref_na': None, 'alt_na': None, 'start': None, 'end': None, AFM_SCORE: NO_SCORE,
-                     EVE_SCORE: NO_SCORE, ESM_SCORE: None, ESM_TYPE: NO_TYPE, ESM3_SCORE: None, ESM3_TYPE: NO_TYPE,
-                     EVE_PREDICTION: NO_SCORE, EVE_TYPE: NO_TYPE, DS_RANK: None}
+NEW_MUTATION_DATA = {'chr': None, 'ref_na': None, 'alt_na': None, 'start': None, 'end': None,
+                     AFM_SCORE: NO_SCORE, AFM_TYPE: NO_TYPE, EVE_SCORE: NO_SCORE, ESM_SCORE: None, ESM_TYPE: NO_TYPE,
+                     ESM3_SCORE: None, ESM3_TYPE: NO_TYPE, EVE_PREDICTION: NO_SCORE, EVE_TYPE: NO_TYPE, DS_RANK: None}
 #  PATIENTS AND FAMILY
 
 DEFAULT_PATIENT_COLUMNS = ['Chr', 'Start', 'End', 'Ref', 'Alt', 'Protein', 'Variant']

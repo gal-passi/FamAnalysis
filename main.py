@@ -354,12 +354,14 @@ def calc_mutations_afm_scores(args, analyzer, chunk=None, iter_desc='', use_alia
         return successful
     n_muts = len(tasks)
     if chunk is not None:
-        uid_index = set(chunk['uniprot_id'].unique())
+        uid_index = list(chunk['uniprot_id'].unique())
+        edges = uid_index[0], uid_index[-1]
     for mutation in tqdm.tqdm(tasks, desc=iter_desc, total=n_muts):
         print_if(args.verbose, VERBOSE['thread_progress'], f"Calculating AlphaMissense scores for {mutation.long_name}")
-        score = analyzer.score_mutation_afm(mutation, chunk=chunk, uid_index=uid_index, use_alias=use_alias)
+        score, afm_type = analyzer.score_mutation_afm(mutation, chunk=chunk, uid_index=uid_index,
+                                                      explicitly_access=edges, use_alias=use_alias)
         successful += score is not None
-        mutation.update_score('AFM', score)
+        mutation.update_score('AFM', score=score, afm_type=afm_type)
         if successful == n_muts:
             return successful
     return successful
@@ -525,13 +527,6 @@ def main(args):
             for chunk in afm_iterator(int(chunksize), usecols=['uniprot_id', 'protein_variant', 'am_pathogenicity']):
                 total_scores += calc_mutations_afm_scores(args, analyzer, chunk, f'iter {iter_num} of {total_iter} ',
                                                      use_alias=False)
-                iter_num += 1
-            # Second run with aliases for mutations without scores
-            print_if(args.verbose, VERBOSE['program_progress'], f"Expending search for unresolved mutations...")
-            iter_num = 1
-            for chunk in afm_iterator(int(chunksize), usecols=['uniprot_id', 'protein_variant', 'am_pathogenicity']):
-                total_scores += calc_mutations_afm_scores(args, analyzer, chunk, f'iter {iter_num} of {total_iter}',
-                                                     use_alias=True)
                 iter_num += 1
             print_if(args.verbose, VERBOSE['program_progress'], f"done, scored {total_scores} of {n_muts} mutations")
         if action == 'score-EVE':
