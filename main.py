@@ -16,9 +16,11 @@ from math import ceil
 import numpy as np
 import shutil
 
+
 def protein_names():
     protein_names = [os.path.basename(path) for path in glob.glob(os.path.join(PROTEIN_PATH, '*'))]
     return protein_names
+
 
 def all_proteins():
     """
@@ -35,6 +37,13 @@ def all_mutations():
             yield mutation
 
 
+def mutations_in_csv(data, args):
+    for _, row in data.iterrows():
+        if row[args.protein_col] not in REMOVED_PROTEINS:
+            yield Mutation(f"p.{row[args.variant_col]}", row[args.protein_col])
+        else:
+            pass
+
 def create_parser():
     parser = argparse.ArgumentParser(
         description="Pipeline interface for protein-level analysis of missense variants in familial data"
@@ -44,7 +53,7 @@ def create_parser():
         "--action",
         type=str,
         choices=["init-DB", "update-DB", "delete-DB", "score-ESM", "score-ESM3",  "score-EVE", "score-AFM", "rank-DS",
-                 "to-csv"],
+                 "to-csv", 'score-INTERFACE'],
         default="init-DB",
         help="init-DB: initialize project database according to the supplied csv file\n"
              "score-[model]: calculate [model] scores for all missense variants in DB\n"
@@ -73,6 +82,15 @@ def create_parser():
         type=int,
         default=0,
         help="number of CPUs to run on, if not given will use maximum CPUs available",
+    )
+
+    parser.add_argument(
+        "--family-summary",
+        type=int,
+        default=0,
+        choices=[0, 1],
+        help="output summary csv file per family \n"
+             "1 - result summary using family files, 0 - result summary for all mutations",
     )
 
     parser.add_argument(
@@ -161,6 +179,16 @@ def create_parser():
         choices=[0, 1],
         help="recalculate scores for all mutations including those with existing score \n"
              "1 - recalc, 0 - calculate only missing scores",
+    )
+
+    parser.add_argument(
+        "--unreviewed",
+        type=int,
+        default=0,
+        choices=[0, 1],
+        help="try to find scores using unreviewed entries for proteins with no scores\n"
+             "currently only employed in AFM"
+             "1 - use unreviewed entries, 0 - use only reviewed entries",
     )
     parser.add_argument(
         "--optimized",
@@ -280,9 +308,10 @@ def create_new_records(args, *rowiters):
     return skipped
 
 
-def to_csv(include_type=False, outpath=''):
+def to_csv(include_type=False, outpath='', mutations=None):
     df = summary_df(include_status=include_type)
-    for mutation in all_mutations():
+    mutations_iter = all_mutations() if mutations is None else mutations
+    for mutation in mutations_iter:
         df.loc[len(df)+1] = mutation.scores_to_csv(include_status=include_type)
     df.replace(0, np.nan, inplace=True)
     df.replace(-1, np.nan, inplace=True)
@@ -326,26 +355,25 @@ def build_db(args, target, workers):
 def erase_mutations_scores(model):
     """
     reset model scores to default
-    :param model: EVE | ESM | AFM
+    :param model: EVE | ESM | AFM | INTERFACE
     :return:
     """
-    assert model in AVAILABLE_MODELS, 'model should be one of EVE | ESM | AFM'
-    score = None if model == 'ESM' else NO_SCORE
+    assert model in AVAILABLE_MODELS, 'model should be one of EVE | ESM | AFM | INTERFACE'
+    score = None if model in ['ESM', 'INTERFACE'] else NO_SCORE
     score_type = NO_TYPE
     for mutation in all_mutations():
-        mutation.update_score(model, score, eve_type=score_type, esm_type=score_type)
+        mutation.update_score(model, score, eve_type=score_type, esm_type=score_type, afm_type=score_type)
     print_if(args.verbose, VERBOSE['program_progress'], f"{model} scores set to default")
 
 
-def calc_mutations_afm_scores(args, analyzer, chunk=None, iter_desc='', use_alias=False):
+def calc_mutations_afm_scores(args, analyzer, chunk=None, iter_desc='', use_alias=True, use_unreviewed=False):
     """
     calculates Alpha Missense scores for all the mutations of a specific protein
-    :param recalc: bool re-calculate scored for mutations with available scores
-    :param use_alias: bool should reviewed uid aliases be searched
+    :param use_alias: bool if True will use uids aliases in search
+    :param use_unreviewed: bool if True will use unreviewed uids aliases in search
     :param args:
     :param analyzer: ProteinAnalyzer object
     :param chunk: optional df chunk to search mutation in
-    :param mutations: Iterator of Mutations
     :return:
     """
     successful = 0
@@ -356,10 +384,13 @@ def calc_mutations_afm_scores(args, analyzer, chunk=None, iter_desc='', use_alia
     if chunk is not None:
         uid_index = list(chunk['uniprot_id'].unique())
         edges = uid_index[0], uid_index[-1]
+    else:
+        uid_index, edges = None, None
     for mutation in tqdm.tqdm(tasks, desc=iter_desc, total=n_muts):
         print_if(args.verbose, VERBOSE['thread_progress'], f"Calculating AlphaMissense scores for {mutation.long_name}")
         score, afm_type = analyzer.score_mutation_afm(mutation, chunk=chunk, uid_index=uid_index,
-                                                      explicitly_access=edges, use_alias=use_alias)
+                                                      explicitly_access=edges, use_alias=use_alias,
+                                                      use_unreviewed_uids=use_unreviewed)
         successful += score is not None
         mutation.update_score('AFM', score=score, afm_type=afm_type)
         if successful == n_muts:
@@ -441,13 +472,13 @@ def calc_mutations_esm_scores(args, analyzer, recalc=False, iter_desc='', infere
     return successful
 
 
-def calc_mutations_dsrank(n_scores_thr):
+def calc_mutations_dsrank(args):
     """
 
     :param n_scores_thr: int number of score under which ds-rank will be considered None
     :return:
     """
-    df = to_csv()
+    df = pd.read_csv(args.data_path)
     #  MIN-MAX SCORES NORMALIZATION
     df[EVE_COL] = (df[EVE_COL] - df[EVE_COL].min()) / (df[EVE_COL].max() - df[EVE_COL].min())
     df[AFM_COL] = (df[AFM_COL] - df[AFM_COL].min()) / (df[AFM_COL].max() - df[AFM_COL].min())
@@ -458,11 +489,14 @@ def calc_mutations_dsrank(n_scores_thr):
     for _, row in df.iterrows():
         protein = Protein(ref_name=row[PROT_COL])
         mutation = Mutation(f"p.{row[MUT_COL]}", protein)
-        score = None if row['n_scores'] < n_scores_thr else float(row[DS_COL])
+        score = None if row['n_scores'] < args.ds_thr else float(row[DS_COL])
         mutation.update_score(model='DS', score=score)
     # change all values under thr to nan
-    df.loc[df['n_scores'] < n_scores_thr, DS_COL] = np.nan
+    df.loc[df['n_scores'] < args.ds_thr, DS_COL] = np.nan
     df.drop('n_scores', axis=1, inplace=True)
+    if args.out_path:
+        df.to_csv(args.out_path)
+    print_if(args.verbose, VERBOSE['program_progress'], f"done")
     return df
 
 
@@ -506,9 +540,35 @@ def calc_mutations_esm3_scores(args, analyzer, recalc):
             successful += 1
             mutation.update_score('ESM3', float(score), esm_type=log)
 
+
+def calc_mutations_interface_scores(args, analyzer, use_alias=True, use_unreviewed=False):
+    """
+    calculates Interface scores for all mutations
+    :param use_alias: bool if True will use uids aliases in search
+    :param use_unreviewed: bool if True will use unreviewed uids aliases in search
+    :param args:
+    :param analyzer: ProteinAnalyzer object
+    :return:
+    """
+    successful = 0
+    tasks = [mut for mut in all_mutations() if not mut.has_interface]
+    if not tasks:
+        return successful
+    n_muts = len(tasks)
+    for mutation in tqdm.tqdm(tasks, total=n_muts):
+        print_if(args.verbose, VERBOSE['thread_progress'], f"Calculating Interface scores for {mutation.long_name}")
+        score = analyzer.score_interface(mutation=mutation, use_alias=use_alias,
+                                                         use_unreviewed_uids = use_unreviewed)
+        successful += score is not None
+        mutation.update_score('INTERFACE', score=score)
+        if successful == n_muts:
+            return successful
+    return successful
+
 def main(args):
     workers = args.workers if args.workers else cpu_count()
     analyzer = Analyze.ProteinAnalyzer()
+    n_muts = len(glob.glob(pjoin(MUTATION_PATH, '*.txt')))
     for action in args.action:
         if action == 'init-DB':
             print_if(args.verbose, VERBOSE['program_progress'], f"running on {workers} CPUs")
@@ -517,17 +577,20 @@ def main(args):
             skipped = build_db(args, target=target, workers=workers)
             return skipped
         if action == 'score-AFM':
-            chunksize = adaptive_chunksize(AFM_ROWSIZE, LOW_MEM_RAM_USAGE)
-            n_muts, iter_num, total_iter, total_scores =len(glob.glob(pjoin(MUTATION_PATH, '*.txt'))), 1, \
-                                                        ceil(AFM_ROWS / chunksize), 0
+            #  chunk search is now depreciated
+            #chunksize = adaptive_chunksize(AFM_ROWSIZE, LOW_MEM_RAM_USAGE)
+            #n_muts, iter_num, total_iter, total_scores =len(glob.glob(pjoin(MUTATION_PATH, '*.txt'))), 1, ceil(AFM_ROWS / chunksize), 0
             if args.recalc:
                 erase_mutations_scores('AFM')
-
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating AlphaMissense scores...")
-            for chunk in afm_iterator(int(chunksize), usecols=['uniprot_id', 'protein_variant', 'am_pathogenicity']):
-                total_scores += calc_mutations_afm_scores(args, analyzer, chunk, f'iter {iter_num} of {total_iter} ',
-                                                     use_alias=False)
-                iter_num += 1
+            #for chunk in afm_iterator(int(chunksize), usecols=['uniprot_id', 'protein_variant', 'am_pathogenicity']):
+            #    total_scores += calc_mutations_afm_scores(args, analyzer, chunk, f'iter {iter_num} of {total_iter} ',
+            #                                         use_alias=False)
+            #    iter_num += 1
+            total_scores = calc_mutations_afm_scores(args, analyzer, use_alias=True)
+            if args.unreviewed:
+                print_if(args.verbose, VERBOSE['program_progress'], f"using unreviewed entries for unresolved variants")
+                total_scores += calc_mutations_afm_scores(args, analyzer, use_alias=True, use_unreviewed=True)
             print_if(args.verbose, VERBOSE['program_progress'], f"done, scored {total_scores} of {n_muts} mutations")
         if action == 'score-EVE':
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating EVEmodel scores...")
@@ -551,16 +614,32 @@ def main(args):
                         print(f"Task ID {args.task_id} exceeds available protein count ({len(proteins)}). Skipping.")
             else:
                 calc_mutations_esm3_scores(args, analyzer, recalc=args.recalc)
-
+        if action == 'score-INTERFACE':
+            if args.recalc:
+                erase_mutations_scores('INTERFACE')
+            print_if(args.verbose, VERBOSE['program_progress'], f"Calculating interface scores...")
+            total_scores = calc_mutations_interface_scores(args, analyzer, use_alias=True)
+            if args.unreviewed:
+                print_if(args.verbose, VERBOSE['program_progress'], f"using unreviewed entries for unresolved variants")
+                total_scores += calc_mutations_interface_scores(args, analyzer, use_alias=True, use_unreviewed=True)
+            print_if(args.verbose, VERBOSE['program_progress'], f"done, scored {total_scores} of {n_muts} mutations")
 
         if action == 'rank-DS':
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating Dataset Rank values...")
-            return calc_mutations_dsrank(args.ds_thr)
+            return calc_mutations_dsrank(args)
         if action == 'to-csv':
             print_if(args.verbose, VERBOSE['program_progress'], f"extracting scored to csv...")
-            return to_csv(args.include_type, args.out_path)
-
-
+            if args.family_summary:
+                family_files_path = glob.glob(pjoin(FAMILY_DATA_PATH, '.csv'))
+                for path in family_files_path:
+                    family_name = os.path.basename(path)[:-4]
+                    family_data = pd.read_csv(path)
+                    mutations = mutations_in_csv(family_data, args)
+                    outpth = pjoin(FAMILY_SCORES_PATH, f"scores_{family_name}.csv")
+                    to_csv(args.include_type, outpath=outpth, mutations=mutations)
+            else:
+                to_csv(args.include_type, args.out_path)
+            print_if(args.verbose, VERBOSE['program_progress'], f"done")
 
 if __name__ == "__main__":
     parser = create_parser()

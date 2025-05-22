@@ -1,6 +1,5 @@
 import os
 from os.path import basename
-from subprocess import check_output
 import numpy as np
 from Bio import SeqIO
 import json
@@ -75,88 +74,18 @@ class ProteinAnalyzer:
             self.af_ranges = json.load(file)
         with open(ESM_INDEX_PATH, 'r') as file:
             self.esm_index = json.load(file)
+        self.pioneer_sequences, self.pioneer_predictions = None, None  # high memory usage load on demand
 
-    def analyze_all_proteins(self):
-        """
-        analyzes all protein's mutations
-        :return: {name_mutation: Scores obj}
-        """
-        ret = {}
-        for protein in self.proteins:
-            ret = ret | self.analyze_single_protein(self.proteins[protein])
+    def _load_pioneer_data(self):
+        with open(PIONEER_SEQ_PATH, 'r') as file:
+            self.pioneer_sequences = json.load(file)
+        with open(PIONEER_PRED_PATH, 'r') as file:
+            self.pioneer_predictions = json.load(file)
 
-        return ret
-
-    def analyze_single_protein(self, protein):
-        """
-        analyzes a single Protein obj
-        :param protein: Prot obj
-        :return: {name_mutation: Scores obj}
-        """
-        ret = {}
-        for mut in protein.muts:
-            ret = ret | self.analyze_single_mutation(mut, protein)
-
-        return ret
-
-    def analyze_single_mutation(self, mutation, protein):
-        """
-        analyzes a single mutation of a Protein obj
-        :param mutation: p.{AA}{location}{AA} must be in prteins mutation dictionary
-        :param protein: Protein obj.
-        :return: {name_mutation_isoform: Scores obj}
-        """
-        paths = protein.pdb_paths(mutation)  # {isoform: [pdb_pathes]}
-        extended_name = False
-        if len(paths) > 1:
-            warnings.warn("Notice: mutation found in more then two isoforms, will be saved in format name_mut_iso")
-            extended_name = True
-        for iso, pdbs in paths:
-            for pdb in pdbs:
-                chains = self.pdb_chains(pdb)  # {chain id: Bio.seq}
-                isoform = iso if extended_name else ""
-                ref = protein.get_ref_seq(mutation, isoform)
-                relevant_ids = self._find_chains(chains, ref)  # set
-                self.score_distance(pdb, chains, relevant_ids, mutation)
-
-    def score_distances(self, mutation):
-        """
-        :param mutation: Mutation object
-        :return: {pdb: interface_distance}
-        """
-        scores = {}
-        for pdbid in mutation.raw_pdbs:
-            path = os.path.join(self.PDBS_DB_ROOT, f"pdb{pdbid}.ent")
-            chains = self.pdb_chains(path)
-            mutation_chains = self._find_chains(chains, mutation)
-            scores[pdbid] = self._score_distance(path, set(chains.keys()), mutation_chains)
-        return scores
-
-    #  TODO finish - we should preforme the check to all pairs of relevent_id - other chains in diffiernt thr
-    #  TODO start form the lowest thr and move up - if lowest was match no reason to continue
-    #  TODO no reason the check pairs from two different directions AC == CA ids are a set use it!
-    def _score_distance(self, pdb_path, all_chains, mutation_chains):
-        """
-        gives a distance score to the given mutation in the pdb_path.
-        :param pdb_path: path to pdb file in question
-        :param chains: {chain_id, seq}
-        :param ids: relevent ids for mutation
-        :param ids: threshold int threshold parameter for interface script
-        :param mutation: mutation object
-        :return: int 0-3 where 0 is very far and 3 is very close
-        """
-        interface_score = np.inf
-        for d in ['2', '3', '4', '6', '8', '12', '16']:
-            for chain_id, loc in mutation_chains:
-                search_term = b'%d  %b' % (loc, chain_id.encode('utf8'))
-                other_chains = all_chains.difference(chain_id)
-                for c in other_chains:
-                    res = check_output([self.INTERFACE, '-c', pdb_path, chain_id, c, d]).find(search_term)
-                    if res != -1:
-                        return d
-        return interface_score
-
-        # start from location 2
+    def erase_pioneer_data(self):
+        del self.pioneer_sequences
+        del self.pioneer_predictions
+        self.pioneer_sequences, self.pioneer_predictions = None, None
 
     @staticmethod
     def _find_chains(chains_dict, mutation):
@@ -332,51 +261,6 @@ class ProteinAnalyzer:
                         return float(cpt_variant.iloc[0][CPT_SCORE_COLUMN])
             return -1
 
-    def score_mutation_afm(self, mutation, chunk=None, uid_index=None, explicitly_access=None, offset=0,
-                           use_alias=False):
-        """
-        Scores mutation using AlphaMissense
-        Searches main Uniprot entry and if not found all reviewed entries
-
-        :param mutation: Mutation object
-        :param offset: int offset for mutation index
-        :param chunk: DataFrame - optional if given will search for the mutation in batch
-                    instead of importing data from disk. Recommended when scoring multiple mutations.
-        :param uid_index: optional set of uids in chunk, can reduce running time
-        :param explicitly_access: optional set of uids that should explicitly imported from the DB
-        :return: float AlphaMissense score if found else -1
-        """
-        main_uid = mutation.protein.Uid
-        reviewed_uids = mutation.protein.all_uids()['reviewed']
-        references = mutation.ref_seqs.values()
-        if isinstance(reviewed_uids, str):
-            reviewed_uids = [reviewed_uids]
-        variant_location = mutation.loc + offset
-        variant = f"{mutation.origAA}{variant_location}{mutation.changeAA}"
-        index = uid_index if uid_index else self.af_index
-        explicitly_access = explicitly_access if explicitly_access else set()
-        uids = [main_uid] + reviewed_uids if use_alias else [main_uid]
-        main_uid_flag = True
-        for uid in uids:
-            if uid in index:
-                idx_from = self.af_index[uid]
-                idx_to = self.af_ranges[str(idx_from)]
-                if uid in explicitly_access:
-                    # used for sequences that spread over multiple chunks --> load ranges explicitly
-                    print('edge invoked!')
-                    score = self._afm_score_from_uid(uid, variant, idx_from, idx_to,
-                                                     mut_references=references, chunk=None)
-                else:
-                    score = self._afm_score_from_uid(uid, variant, idx_from, idx_to,
-                                                     mut_references=references, chunk=chunk)
-                if score is not None and main_uid_flag:
-                    return score, 'main_uid'
-                elif score is not None and not main_uid_flag:
-                    return score, 'alias'
-                main_uid_flag = False
-        # score not found
-        return None, NO_TYPE
-
     def score_mutation_esm1b_precomputed(self, mut, offset=0, optimized=0):
         """
         :param mut: Mutation object
@@ -514,7 +398,64 @@ class ProteinAnalyzer:
                 return float(column[row]), 'indirect'
         return None, None
 
-    def _afm_score_from_uid(self, uid, variant, idx_from, idx_to, mut_references=None, chunk=None):
+    def score_mutation_afm(self, mutation, chunk=None, uid_index=None, explicitly_access=None, offset=0,
+                           use_alias=False, use_unreviewed_uids=False):
+        """
+        Scores mutation using AlphaMissense
+        Searches main Uniprot entry and if not found all reviewed entries
+
+        :param mutation: Mutation object
+        :param offset: int offset for mutation index
+        :param chunk: DataFrame - optional if given will search for the mutation in batch
+                    instead of importing data from disk. Recommended when scoring multiple mutations.
+        :param uid_index: optional set of uids in chunk, can reduce running time
+        :param explicitly_access: optional set of uids that should explicitly imported from the DB
+        :param use_alias: optional bool if true will use alias uids in search
+        :param use_unreviewed_uids: optional bool if true will use unreviewed alias uids
+        :return: float AlphaMissense score if found else -1
+        """
+        main_uid = mutation.protein.Uid
+        alias_uids = mutation.protein.all_uids()['reviewed'] if not use_unreviewed_uids else \
+            mutation.protein.all_uids()['non_reviewed']
+        references = mutation.ref_seqs.values()
+        if isinstance(alias_uids, str):
+            alias_uids = [alias_uids]
+        variant_location = mutation.loc + offset
+        variant = f"{mutation.origAA}{variant_location}{mutation.changeAA}"
+        index = uid_index if uid_index else self.af_index
+        explicitly_access = explicitly_access if explicitly_access else set()
+        uids = [main_uid] + alias_uids if use_alias else [main_uid]
+        main_uid_flag = True
+        for uid in uids:
+            if uid in index:
+                #  search by chunks will be removed in the future
+                if chunk is not None:
+                    score, desc = self._chunk_score_afm(chunk, uid, variant, explicitly_access, references)
+                else:  # default search by AFM protein files
+                    score, desc = self._afm_score_from_uid(uid, variant, mut_references=references)
+
+                if score is not None and main_uid_flag:
+                    return score, f'main_uid\t{desc}'
+                elif score is not None and not main_uid_flag:
+                    return score, f'alias\t{desc}'
+                main_uid_flag = False
+        # score not found
+        return None, NO_TYPE
+
+    #  Will be removed inb the future
+    def _chunk_score_afm(self, chunk, uid, variant, explicitly_access, references):
+        idx_from = self.af_index[uid]
+        idx_to = self.af_ranges[str(idx_from)]
+        if uid in explicitly_access:
+            # used for sequences that spread over multiple chunks --> load ranges explicitly
+            score, desc = self._afm_score_from_uid(uid, variant, idx_from, idx_to,
+                                                   mut_references=references, chunk=None)
+        else:
+            score, desc = self._afm_score_from_uid(uid, variant, idx_from, idx_to,
+                                                   mut_references=references, chunk=chunk)
+        return score, desc
+
+    def _afm_score_from_uid(self, uid, variant, idx_from=None, idx_to=None, mut_references=None, chunk=None):
         """
         extract alpha Missense score from raw data if not found returns -1
         :param variant: str protein variant in formal [AA][location][AA]
@@ -524,21 +465,32 @@ class ProteinAnalyzer:
                 instead of importing data from disk. Recommended when scoring multiple mutations.
         :return:
         """
-        data = afm_range_read(idx_from, idx_to) if chunk is None else chunk
+        if not (variant[-1] in VALID_AA) and (variant[0] in VALID_AA):
+            return None, ''
+        if chunk is not None:
+            data = chunk
+        elif idx_to is not None and idx_from is not None:
+            data = afm_range_read(idx_from, idx_to)
+        else:
+            path = pjoin(AFM_PROTEINS_PATH, f'{uid}.csv.gz')
+            if not os.path.exists(path):
+                return None, ''
+            data = pd.read_csv(path, compression='gzip', header=0, sep=',', quotechar='"', on_bad_lines='skip')
         score = data[(data['protein_variant'] == variant) & (data['uniprot_id'] == uid)]['am_pathogenicity']
         if not score.empty:
-            return float(score.iloc[0])
+            return float(score.iloc[0]), 'direct'
         # direct search failed --> try by reference
         if mut_references:
-            record_data = chunk[chunk['uniprot_id'] == uid] if chunk is not None else data
+            record_data = data[data['uniprot_id'] == uid]
             afm_seq = sequence_from_afm_df(record_data)
             if not afm_seq:
                 warn_if(2, VERBOSE['thread_warnings'], f'afm seq truncated {uid}')
-                return None
+                record_data.to_csv(f'log_{variant}_{uid}.csv')
+                return None, ''
             for ref_seq in mut_references:
                 if len(ref_seq) < REF_SEQ_PADDING * 2:  # skip if ref seq is too short
                     continue
-                row_idx = seacrh_by_ref_seq(main_seq=afm_seq, ref_seq=ref_seq, n_aa=19)
+                row_idx = seacrh_by_ref_seq(main_seq=afm_seq, ref_seq=ref_seq, n_rows=19)
                 if row_idx == -1:
                     continue  # ref not found
                 else:
@@ -548,9 +500,40 @@ class ProteinAnalyzer:
                     if len(afm_variant) != 1:
                         warn_if(2, VERBOSE['thread_warnings'],
                                 f"error with AFM search by reference, in {variant} skipping...")
-                        print(f'chunk: {chunk is not None}')
-                        record_data.to_csv(f'log_{variant}.csv')
+                        record_data.to_csv(f'log_{variant}_{uid}.csv')
                         continue
                     elif pd.notna(afm_variant.iloc[0]['am_pathogenicity']):
-                        return float(afm_variant.iloc[0]['am_pathogenicity'])
+                        return float(afm_variant.iloc[0]['am_pathogenicity']), 'ref'
+        return None, ''
+
+    def score_interface(self, mutation, use_alias=False, use_unreviewed_uids=False):
+        """
+        interface score using pioneer
+        :param mutation: Mutation object
+        :return: tuple (int score, str score_type)
+        """
+        if self.pioneer_predictions is None or self.pioneer_sequences is None:
+            self._load_pioneer_data()
+        main_uid = mutation.protein.Uid
+        alias_uids = mutation.protein.all_uids()['reviewed'] if not use_unreviewed_uids else \
+            mutation.protein.all_uids()['non_reviewed']
+        references = mutation.ref_seqs.values()
+        if isinstance(alias_uids, str):
+            alias_uids = [alias_uids]
+        uids = [main_uid] + alias_uids if use_alias else [main_uid]
+        for uid in uids:
+            if uid not in self.pioneer_sequences:
+                continue
+            pioneer_seqs = self.pioneer_sequences[uid]
+            #  TODO search only by ref does not cover edges mutation.loc < 10 or mutation.loc > len(seq)-10
+            for ref_seq in references:
+                if len(ref_seq) < REF_SEQ_PADDING * 2:  # skip if ref seq is too short
+                    continue
+                for pioneer_seq in pioneer_seqs:  # usually of size 1
+                    pred_idx = seacrh_by_ref_seq(pioneer_seq, ref_seq, n_rows=1)
+                    if pred_idx == -1:  # ref not found in pioneer seq
+                        continue
+                    pred = self.pioneer_predictions[pioneer_seq][pred_idx]
+                    return pred
         return None
+

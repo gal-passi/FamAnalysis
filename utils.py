@@ -257,7 +257,7 @@ def protein_exists(ref_name):
     return ref_name in set(os.listdir('DB/proteins'))
 
 
-def seacrh_by_ref_seq(main_seq, ref_seq, padding=REF_SEQ_PADDING, n_aa=20):
+def seacrh_by_ref_seq(main_seq, ref_seq, padding=REF_SEQ_PADDING, n_rows=20):
     """
     :return: index of start row of wt AA
     """
@@ -265,7 +265,7 @@ def seacrh_by_ref_seq(main_seq, ref_seq, padding=REF_SEQ_PADDING, n_aa=20):
     if seq_start == -1:
         return -1
     aa_location = seq_start + padding
-    start_row_idx = aa_location * n_aa
+    start_row_idx = aa_location * n_rows
     return start_row_idx
 
 

@@ -34,7 +34,6 @@ class Mutation:
         self._pdbs = None  # initialized only upon request
         self._chr, self._start, self._end, self._orig_NA, self._change_NA = 0, 0, 0, None, None
         self._families, self._patients = set(), set()
-        self._interface = {}
 
         self._v = verbose_level
         if not protein or not full_desc:
@@ -88,6 +87,8 @@ class Mutation:
         :return:
         """
         res = self._descriptor_processor(full_desc)
+        if not (res.group('change') in VALID_AA) and (res.group('orig') in VALID_AA):
+            raise ValueError(f'Invalid missense variant: {full_desc}')
         self._symbol, self._orig, self._change, self._loc, self._full_desc = \
             res.group('symbol'), res.group('orig'), res.group('change'), int(res.group('location')), full_desc
         if data:
@@ -108,7 +109,7 @@ class Mutation:
                 'change': self._change, 'location': self._loc, 'full_desc': self._full_desc,
                 'chr': self._chr, 'start': self._start, 'end': self._end,
                 'orig_NA': self._orig_NA, 'change_NA': self._change_NA, 'manual_ref': self._manual_ref,
-                'interface': self._interface, 'patients': self._patients, 'families': self._families}
+                'patients': self._patients, 'families': self._families}
         with open(path, "wb") as file:
             pickle.dump(data, file)
 
@@ -118,7 +119,7 @@ class Mutation:
                 data = pickle.load(file)
                 self._symbol, self._orig, self._change, self._loc, self._full_desc, = \
                     data['name'], data['orig'], data['change'], data['location'], data['full_desc']
-                self._interface = data['interface']
+                self._patients, self._families = data['patients'], data['families']
                 # TODO give optional load for missing data
                 self._chr, self._start, self._end, self._orig_NA, self._change_NA = \
                     data['chr'], data['start'], data['end'], data['orig_NA'], data['change_NA']
@@ -259,17 +260,6 @@ class Mutation:
         return pdbs
 
     @property
-    def interface(self):
-        if self._interface:
-            return self._interface
-        else:
-            return -1
-        # TODO fix should not calculate by default
-        # if not self.raw_pdbs: return {}
-        # self._interface = self.calc_interface()
-        # return self._interface
-
-    @property
     def chr(self):
         return self._chr
 
@@ -367,6 +357,19 @@ class Mutation:
             return None
 
     @property
+    def interface_score(self):
+        """
+        :return: interface sxore
+        """
+        try:
+            return self._protein.muts[self.extended_description][MODELS_SCORES['INTERFACE']]
+        except KeyError:
+            warn_if(self._v, VERBOSE['thread_warnings'],
+                    f"Interface not initialized for mutation - try to add mutation again")
+            warn_if(self._v, VERBOSE['raw_warnings'], f"\n{self._protein.muts}")
+            return None
+
+    @property
     def has_esm(self):
         return self.esm_score is not None
 
@@ -397,6 +400,10 @@ class Mutation:
         return (self.afm_score is not None) and (self.afm_score != NO_SCORE)
 
     @property
+    def has_interface(self):
+        return self.interface_score not in [None, NO_SCORE]
+
+    @property
     def eve_prediction(self):
         return self._protein.muts[self.extended_description][EVE_PREDICTION]
 
@@ -418,6 +425,10 @@ class Mutation:
     @property
     def afm_type(self):
         return self._protein.muts[self.extended_description][AFM_TYPE]
+
+    @property
+    def interface_type(self):
+        return self._protein.muts[self.extended_description][INTERFACE_TYPE]
 
     @property
     def firm_score(self):
@@ -545,10 +556,12 @@ class Mutation:
     def update_score(self, model, score, eve_type='', esm_type='', afm_type=''):
         """
         updates mutation model scores
-        :param model: str one of: EVE | ESM | AFM | DS | ESM3
+        :param model: str one of: EVE | ESM | AFM | DS | ESM3 | INTERFACE
         :param score: float score to update
         :param esm_type: specification of model used for eveModel score
         :param eve_type: specification of inference used in esm
+        :param afm_type: specification for afm
+        :param interface_type: specification for interface int in 0 | 1 | 2 | 3
         :return:
         """
         assert model in AVAILABLE_SCORES, f"model must be one of {' | '.join(AVAILABLE_SCORES)}"
@@ -563,6 +576,9 @@ class Mutation:
             prot.muts[self.extended_description][MODELS_SCORES['ESM3_METHOD']] = esm_type
         if model == 'AFM' and afm_type:
             prot.muts[self.extended_description][MODELS_SCORES['AFM_METHOD']] = afm_type
+        if model == 'INTERFACE':
+            prot.muts[self.extended_description][MODELS_SCORES['INTERFACE_METHOD']] = NUM_TO_SOURCE[score]
+
         prot._update_DB(pjoin(prot.directory, prot.MUTS), prot.muts, mode='pickle')
 
     def esm_scores_from_inference(self, how='all'):
@@ -602,9 +618,12 @@ class Mutation:
         esm_score = self.esm_score if self.esm_score is not None else 0
         esm3_score = self.esm3_score if self.esm3_score is not None else 0
         afm_score = self.afm_score if self.afm_score is not None else 0
+        interface_score = self.interface_score if self.interface_score is not None else -1
         ds_rank = self.ds_rank if self.ds_rank is not None else -1
         if include_status:
             return [self.protein_name, self.name, self.eve_score, self.eve_type, esm_score,
-                    self.esm_type, esm3_score, self.esm3_type, afm_score, self.afm_type, ds_rank]
+                    self.esm_type, esm3_score, self.esm3_type, afm_score, self.afm_type,
+                    interface_score, self.interface_type, ds_rank]
         else:
-            return [self.protein_name, self.name, self.eve_score, esm_score, esm3_score, afm_score, ds_rank]
+            return [self.protein_name, self.name, self.eve_score, esm_score, esm3_score, afm_score, interface_score,
+                    ds_rank]

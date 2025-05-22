@@ -37,7 +37,10 @@ EVE_PATH = pjoin(DB_PATH, 'EVE')
 EVE_PARQUET_DIR = Path(EVE_PATH) / "parquet_files"
 CPT_PATH = pjoin(DB_PATH, 'CPT')
 ESM_PATH = pjoin(DB_PATH, 'ESM')
-DB_CHILDREN = ['AFM', 'CPT', 'EVE', 'ESM', 'Family', 'Patients', PROTEINS, MUTATIONS]
+PIONEER_PATH = pjoin(DB_PATH, 'PIONEER')
+FAMILY_PATH = pjoin(DB_PATH, 'Family')
+DB_CHILDREN = ['AFM', 'CPT', 'EVE', 'ESM', 'PIONEER', 'Family', 'Patients', PROTEINS, MUTATIONS]
+FAMILY_SUBDIRS = ['data', 'scores']
 CHILDREN_INDEX = {child: i for i, child in enumerate(DB_CHILDREN)}
 EVE_SETUP_INDEX_DIR = 'eve_index'
 
@@ -110,6 +113,7 @@ DOWNLOAD_VALIDATION_MSG = 'File {} is validated.'
 #  AMINO ACIDS UTILS
 
 A_A = "ACDEFGHIKLMNPQRSTVWXY"
+VALID_AA = "ACDEFGHIKLMNPQRSTVWY"
 N_AA = 20
 AA_SYN = {"A": "ALA", "C": "CYS", "D": "ASP", "E": "GLU", "F": "PHE", "G": "GLY", "H": "HIS", "I": "ILE",
           "K": "LYS", "L": "LEU", "M": "MET", "N": "ASN", "P": "PRO", "Q": "GLN", "R": "ARG", "S": "SER",
@@ -149,19 +153,23 @@ ESM3_TYPE = 'esm3Method'
 AFM_SCORE = 'afmScore'
 AFM_TYPE = 'afmMethod'
 EVE_TYPE = 'eveMethod'
+INTERFACE_SCORE = 'interfaceScore'
+INTERFACE_TYPE = 'interfaceMethod'
 DS_RANK = 'DSRank'
-AVAILABLE_MODELS = {'EVE', 'ESM', 'AFM', 'ESM3', 'ESM1B', 'ESM1b'}
+AVAILABLE_MODELS = {'EVE', 'ESM', 'AFM', 'ESM3', 'ESM1B', 'ESM1b', 'INTERFACE'}
 AVAILABLE_SCORES = AVAILABLE_MODELS | {'DS'}
 MODELS_SCORES = {'EVE': EVE_SCORE, 'ESM': ESM_SCORE, 'ESM1B': ESM_SCORE, 'ESM1b': ESM_SCORE, 'ESM3': ESM3_SCORE,
                  'AFM': AFM_SCORE, 'FIRM': FIRM_SCORE, 'EVE_METHOD': EVE_TYPE, 'ESM_METHOD': ESM_TYPE, 'DS': DS_RANK,
-                 'ESM3_METHOD': ESM3_TYPE, 'ESM1b_METHOD': ESM_TYPE, 'ESM_METHOD1B': ESM_TYPE, 'AFM_METHOD': AFM_TYPE}
+                 'ESM3_METHOD': ESM3_TYPE, 'ESM1b_METHOD': ESM_TYPE, 'ESM_METHOD1B': ESM_TYPE, 'AFM_METHOD': AFM_TYPE,
+                 'INTERFACE': INTERFACE_SCORE, 'INTERFACE_METHOD': INTERFACE_TYPE}
 NO_SCORE = -1.0
 NO_TYPE = 'no_score'
 
 #  PROTEINS CONSTANTS
 
 PROTEIN_ALIASES = {'LOC100287896': 'LIPT2', 'FPGT-TNNI3K': 'TNNI3K', 'ATPSJ2-PTCD1': 'PTCD1', 'CCL4L1': 'CCL4L2',
-                   'PTGDR2': 'CCDC86', '4-SEPT': 'SEPT4', '4-Sep': 'SEPT4','TPTEP2-CSNK1E': 'CSNK1E', 'LOC101928841': 'ADPRHL1',
+                   'PTGDR2': 'CCDC86', '4-SEPT': 'SEPT4', '4-Sep': 'SEPT4', 'TPTEP2-CSNK1E': 'CSNK1E',
+                   'LOC101928841': 'ADPRHL1',
                    'LOC102724159': 'PWP2', 'LOC100421372': 'MSANTD7', 'LOC102724488': 'SYT15B', 'LOC645177': 'IRAG2',
                    'CBSL': 'CBS_HUMAN'}
 REMOVED_PROTEINS = ['LOC100996842', 'GLRA4', 'LOC390877', 'NM_001365196', 'LOC645188', 'COL4A2-AS2', 'PPP5D1',
@@ -175,20 +183,25 @@ MUTATION_REGEX = rf'p\.(?P<symbol>(?P<orig>[{A_A}]){{1}}(?P<location>[\d]+)(?P<c
 REF_SEQ_PADDING = 5
 NEW_MUTATION_DATA = {'chr': None, 'ref_na': None, 'alt_na': None, 'start': None, 'end': None,
                      AFM_SCORE: NO_SCORE, AFM_TYPE: NO_TYPE, EVE_SCORE: NO_SCORE, ESM_SCORE: None, ESM_TYPE: NO_TYPE,
-                     ESM3_SCORE: None, ESM3_TYPE: NO_TYPE, EVE_PREDICTION: NO_SCORE, EVE_TYPE: NO_TYPE, DS_RANK: None}
+                     ESM3_SCORE: None, ESM3_TYPE: NO_TYPE, EVE_PREDICTION: NO_SCORE, EVE_TYPE: NO_TYPE,
+                     INTERFACE_SCORE: None, INTERFACE_TYPE: NO_TYPE, DS_RANK: None}
 #  PATIENTS AND FAMILY
 
 DEFAULT_PATIENT_COLUMNS = ['Chr', 'Start', 'End', 'Ref', 'Alt', 'Protein', 'Variant']
+FAMILY_DATA_PATH = pjoin(FAMILY_PATH, 'data')
+FAMILY_SCORES_PATH = pjoin(FAMILY_PATH, 'scores')
 
 #  ALPHA MISSENSE DATA
 
 AFM_PUBLIC_DATA = 'https://storage.googleapis.com/dm_alphamissense/AlphaMissense_aa_substitutions.tsv.gz'
 AFM_DATA = 'AlphaMissense_aa_substitutions.tsv'
+AFM_PROTEINS = 'protein_files'
 AFM_DATA_PATH = pjoin(AFM_PATH, AFM_DATA)
 AFM_DIRECTORY = 'index.json'
 AFM_RANGES = 'ranges.json'
 AFM_DIRECTORY_PATH = pjoin(AFM_PATH, AFM_DIRECTORY)
 AFM_RANGES_PATH = pjoin(AFM_PATH, AFM_RANGES)
+AFM_PROTEINS_PATH = pjoin(AFM_PATH, AFM_PROTEINS)
 AFM_HEADER = 3
 AFM_COL_NAMES = ['uniprot_id', 'protein_variant', 'am_pathogenicity', 'am_class']
 AFM_ROWSIZE = 32.0
@@ -245,8 +258,8 @@ ESM_MAX_LENGTH = 1020
 
 #  ESM-1b
 
-#ESM1_AA_ORDER = 'KRHEDNQTSCGAVLIMPYFW'
-#AA_ESM1_LOC = {aa: idx for idx, aa in enumerate(ESM1_AA_ORDER)}
+# ESM1_AA_ORDER = 'KRHEDNQTSCGAVLIMPYFW'
+# AA_ESM1_LOC = {aa: idx for idx, aa in enumerate(ESM1_AA_ORDER)}
 ESM1B_MODEL = 'esm1b_t33_650M_UR50S'
 ESM_VARIANTS_DATA = 'https://huggingface.co/spaces/ntranoslab/esm_variants/resolve/main/ALL_hum_isoforms_ESM1b_LLR.zip'
 ESM_DATA = 'ESM_1b_variants'
@@ -263,10 +276,27 @@ REP_LAYERS = [33]
 
 ESM3_MODEL = 'esm3_sm_open_v1'
 
+# PIONEER
+
+PIONEER_PUBLIC_DATA = 'https://pioneer.yulab.org/static/predictions/high/human.txt'
+PIONEER_RAW_DATA = 'all_predictions.txt'
+PIONEER_DATA_PATH = pjoin(PIONEER_PATH, PIONEER_RAW_DATA)
+PIONEER_SEQ_PATH = pjoin(PIONEER_PATH, 'pioneer_sequences.json')
+PIONEER_PRED_PATH = pjoin(PIONEER_PATH, 'pioneer_predictions.json')
+SOURCE_TO_NUM = {'PDB': 1, 'HM': 2, 'PIONEER': 3}
+NUM_TO_SOURCE = {v: k for k, v in SOURCE_TO_NUM.items()} | {0: 'no_contact', -1: NO_TYPE, None: NO_TYPE}
+
 #  DSRANK AND SUMMARY
-EVE_COL, EVE_TYPE_COL, ESM_COL, ESM_TYPE_COL, ESM3_COL, ESM3_TYPE_COL, AFM_COL, DS_COL = \
-    "eve", "eve_type", "esm1b", "esm1b_type", "esm3", "esm3_type", "afm", "ds_rank"
+
+EVE_COL, EVE_TYPE_COL, ESM_COL, ESM_TYPE_COL, ESM3_COL, ESM3_TYPE_COL, AFM_COL, AFM_TYPE_COL, INTERFACE_COL, \
+INTERFACE_TYPE_COL, DS_COL = "eve", "eve_type", "esm1b", "esm1b_type", "esm3", "esm3_type", "afm", "afm_type", \
+                             "inteface", "interface_type", "ds_rank"
 PROT_COL, MUT_COL = 'protein', 'variant'
 COLUMNS_W_STATUS = [PROT_COL, MUT_COL, EVE_COL, EVE_TYPE_COL, ESM_COL, ESM_TYPE_COL, ESM3_COL, ESM3_TYPE_COL,
-                    AFM_COL, DS_COL]
-COLUMNS_NO_STATUS = [PROT_COL, MUT_COL, EVE_COL, ESM_COL, ESM3_COL, AFM_COL, DS_COL]
+                    AFM_COL, AFM_TYPE_COL, INTERFACE_COL, INTERFACE_TYPE_COL, DS_COL]
+COLUMNS_NO_STATUS = [PROT_COL, MUT_COL, EVE_COL, ESM_COL, ESM3_COL, AFM_COL, INTERFACE_COL, DS_COL]
+
+#  FAMRANK
+
+FAMRANK_COLUMNS_W_STATUS = COLUMNS_W_STATUS + ['eve_top', 'esm_to', 'afm_top', 'top_by_two', 'top_by_three',
+                                               'intrafamily_recurrence', 'interfamily_recurrence', 'FamRank']

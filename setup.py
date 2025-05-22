@@ -6,7 +6,12 @@ import os
 from os.path import join as pjoin
 import json
 import zipfile
+import gzip
+import ast
 import shutil
+import tqdm
+from math import ceil
+import numpy as np
 
 
 def create_directories():
@@ -14,6 +19,8 @@ def create_directories():
     os.mkdir(DB_PATH)
     for subdir in DB_CHILDREN:
         os.mkdir(pjoin(DB_PATH, subdir))
+    for subdir in FAMILY_SUBDIRS:
+        os.mkdir(pjoin(FAMILY_PATH, subdir))
     print("done")
 
 
@@ -36,6 +43,37 @@ def create_afm_index():
     with open(AFM_RANGES_PATH, "w") as file:
         file.write(json.dumps(ranges))
     print('done')
+    return inverse_index, ranges
+
+
+def split_afm(index, ranges, chunksize=10**6, delte_main_file=True):
+    os.mkdir(pjoin(AFM_PATH, AFM_PROTEINS))
+    truncated_record, truncated_uid = None, None
+    print('splitting Alpha Missense main file...')
+    df_iter =  pd.read_csv(AFM_DATA_PATH, sep='\t', chunksize=chunksize, header=AFM_HEADER,
+                           usecols=['uniprot_id', 'protein_variant', 'am_pathogenicity'])
+    for df in tqdm.tqdm(df_iter, '', ceil(AFM_ROWS / chunksize)):
+        uids = df['uniprot_id'].unique()
+        for uid in uids:
+            record = df[df['uniprot_id'] == uid]
+            idx_start = index[uid]
+            idx_end = ranges[str(idx_start)]
+            if idx_end is None:  # last record
+                record.to_csv(fr'DB/AFM/protein_files/{uid}.csv')
+                continue
+            expected_length = idx_end - idx_start
+            if uid == truncated_uid:
+                record = pd.concat([truncated_record, record])
+                assert len(record) == expected_length, f'concat error {uid}: expected:{expected_length} record: {len(record)}'
+                truncated_record, truncated_uid = None, None
+            elif len(record) < expected_length:
+                assert truncated_uid is None, f'new truncated {uid} before resolving previous truncated {uid}'
+                truncated_record = record
+                truncated_uid = uid
+                continue
+            record.to_csv(pjoin(AFM_PROTEINS_PATH, f'{uid}.csv.gz'), compression='gzip')
+    if delte_main_file:
+        os.remove(AFM_DATA)
 
 
 def create_esm_index():
@@ -43,6 +81,33 @@ def create_esm_index():
     index = {row['gene']: row['id'] for _, row in df.iterrows()}
     with open(ESM_INDEX_PATH, "w") as file:
         file.write(json.dumps(index))
+
+def process_pioneer():
+    pioneer_sequences, pioneer_seq_predictions = {}, {}
+    pioneer_df = pd.read_csv(PIONEER_DATA_PATH, delimiter='\t')
+    for _, row in tqdm.tqdm(pioneer_df.iterrows(), total=len(pioneer_df)):
+        uid_1, uid_2, source, inter_1, inter_2, seq_1, seq_2 = tuple(row)
+        inter_1, inter_2 = ast.literal_eval(inter_1), ast.literal_eval(inter_2)
+        for uid, seq, pred in zip([uid_1, uid_2], [seq_1, seq_2], [inter_1, inter_2]):
+            if uid not in pioneer_sequences:
+                pioneer_sequences[uid] = {seq}
+            else:
+                pioneer_sequences[uid].add(seq)
+            if seq not in pioneer_seq_predictions:
+                pioneer_seq_predictions[seq] = np.zeros(len(seq), dtype=int)
+            #  this will only retain last prediction source
+            if pred:
+                pioneer_seq_predictions[seq][np.array(pred) - 1] = SOURCE_TO_NUM[source]
+    #  serialize data for json
+    pioneer_sequences = {k: list(v) for k, v in pioneer_sequences.items()}
+    pioneer_seq_predictions = {k: v.tolist() for k, v in pioneer_seq_predictions.items()}
+    os.chdir(PIONEER_PATH)
+    with open('pioneer_sequences.json', 'w') as file:
+        file.write(json.dumps(pioneer_sequences, indent=4))
+    with open('pioneer_predictions.json', 'w') as file:
+        file.write(json.dumps(pioneer_seq_predictions, indent=4))
+    os.chdir(ROOT_DIR)
+    print('done')
 
 
 def download_afm():
@@ -125,12 +190,20 @@ def download_esm(remove_zip=True):
     os.chdir(ROOT_DIR)
     print('done')
 
+def download_pioneer():
+    os.chdir(PIONEER_PATH)
+    downloader = SafeDownloader([PIONEER_PUBLIC_DATA], [PIONEER_RAW_DATA])
+    print('Downloading PIONEER data...')
+    downloader.download()
+    os.chdir(ROOT_DIR)
+    print('done')
 
 def download_all_data():
     download_afm()
     download_eve()
     download_cpt()
     download_esm()
+    download_pioneer()
 
 
 def main():
@@ -141,6 +214,8 @@ def main():
     create_esm_index()
     download_eve()
     download_cpt()
+    download_pioneer()
+    process_pioneer()
     print("Setup completed successfully")
 
 
