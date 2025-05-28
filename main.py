@@ -44,6 +44,7 @@ def mutations_in_csv(data, args):
         else:
             pass
 
+
 def create_parser():
     parser = argparse.ArgumentParser(
         description="Pipeline interface for protein-level analysis of missense variants in familial data"
@@ -53,11 +54,12 @@ def create_parser():
         "--action",
         type=str,
         choices=["init-DB", "update-DB", "delete-DB", "score-ESM", "score-ESM3",  "score-EVE", "score-AFM", "rank-DS",
-                 "to-csv", 'score-INTERFACE'],
+                 "rank-family-DS", "to-csv", 'score-INTERFACE'],
         default="init-DB",
         help="init-DB: initialize project database according to the supplied csv file\n"
              "score-[model]: calculate [model] scores for all missense variants in DB\n"
              "rank-DS calculates an aggregated score of all three models by normalizing and averaging available scores"
+             "rank-family-DS same as DS per family instead of the entire dataset"
              "use --ds-thr to set threshold for number of models required to calc scores\n"
              "to-csv outputs a summary file",
         nargs="+",
@@ -103,7 +105,7 @@ def create_parser():
     parser.add_argument(
         "--variant-col",
         type=str,
-            default="Variant",
+        default="Variant",
         help="column name holding the missense variant description in csv file i.e. D17Y | p.D17Y",
     )
 
@@ -161,6 +163,13 @@ def create_parser():
         type=str,
         default="NCBI",
         help="column name holding the variant ncbi transcript (protein) id i.e. NM_[]",
+    )
+
+    parser.add_argument(
+        "--dsrank-col",
+        type=str,
+        default=DS_COL,
+        help="column name where ds-rank will be stored"
     )
 
     parser.add_argument(
@@ -308,11 +317,11 @@ def create_new_records(args, *rowiters):
     return skipped
 
 
-def to_csv(include_type=False, outpath='', mutations=None):
+def to_csv(include_type=False, outpath='', mutations=None, family_name=''):
     df = summary_df(include_status=include_type)
     mutations_iter = all_mutations() if mutations is None else mutations
     for mutation in mutations_iter:
-        df.loc[len(df)+1] = mutation.scores_to_csv(include_status=include_type)
+        df.loc[len(df)+1] = mutation.scores_to_csv(include_status=include_type, family_name=family_name)
     df.replace(0, np.nan, inplace=True)
     df.replace(-1, np.nan, inplace=True)
     if outpath:
@@ -472,31 +481,33 @@ def calc_mutations_esm_scores(args, analyzer, recalc=False, iter_desc='', infere
     return successful
 
 
-def calc_mutations_dsrank(args):
+def calc_mutations_dsrank(args, data_path='', out_path='', update_mut=True):
     """
 
     :param n_scores_thr: int number of score under which ds-rank will be considered None
     :return:
     """
-    df = pd.read_csv(args.data_path)
+    df = pd.read_csv(args.data_path) if not data_path else pd.read_csv(data_path)
     #  MIN-MAX SCORES NORMALIZATION
     df[EVE_COL] = (df[EVE_COL] - df[EVE_COL].min()) / (df[EVE_COL].max() - df[EVE_COL].min())
     df[AFM_COL] = (df[AFM_COL] - df[AFM_COL].min()) / (df[AFM_COL].max() - df[AFM_COL].min())
     df[ESM_COL] = (df[ESM_COL] - df[ESM_COL].min()) / (df[ESM_COL].max() - df[ESM_COL].min())
     df[ESM_COL] = 1 - df[ESM_COL]
     df['n_scores'] = df[[EVE_COL, ESM_COL, AFM_COL]].count(axis=1, numeric_only=False)
-    df[DS_COL] = (df[EVE_COL].fillna(0) + df[ESM_COL].fillna(0) + df[AFM_COL].fillna(0)) / df['n_scores']
-    for _, row in df.iterrows():
-        protein = Protein(ref_name=row[PROT_COL])
-        mutation = Mutation(f"p.{row[MUT_COL]}", protein)
-        score = None if row['n_scores'] < args.ds_thr else float(row[DS_COL])
-        mutation.update_score(model='DS', score=score)
+    df[args.dsrank_col] = (df[EVE_COL].fillna(0) + df[ESM_COL].fillna(0) + df[AFM_COL].fillna(0)) / df['n_scores']
+    if update_mut:
+        for _, row in df.iterrows():
+            protein = Protein(ref_name=row[PROT_COL])
+            mutation = Mutation(f"p.{row[MUT_COL]}", protein)
+            score = None if row['n_scores'] < args.ds_thr else float(row[args.dsrank_col])
+            mutation.update_score(model='DS', score=score)
     # change all values under thr to nan
     df.loc[df['n_scores'] < args.ds_thr, DS_COL] = np.nan
     df.drop('n_scores', axis=1, inplace=True)
-    if args.out_path:
+    if out_path:
+        df.to_csv(out_path)
+    elif args.out_path:
         df.to_csv(args.out_path)
-    print_if(args.verbose, VERBOSE['program_progress'], f"done")
     return df
 
 
@@ -565,6 +576,7 @@ def calc_mutations_interface_scores(args, analyzer, use_alias=True, use_unreview
             return successful
     return successful
 
+
 def main(args):
     workers = args.workers if args.workers else cpu_count()
     analyzer = Analyze.ProteinAnalyzer()
@@ -591,7 +603,7 @@ def main(args):
             if args.unreviewed:
                 print_if(args.verbose, VERBOSE['program_progress'], f"using unreviewed entries for unresolved variants")
                 total_scores += calc_mutations_afm_scores(args, analyzer, use_alias=True, use_unreviewed=True)
-            print_if(args.verbose, VERBOSE['program_progress'], f"done, scored {total_scores} of {n_muts} mutations")
+            print_if(args.verbose, VERBOSE['program_progress'], f"done, scored {total_scores} mutations")
         if action == 'score-EVE':
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating EVEmodel scores...")
             calc_mutations_eve_scores(args, analyzer, recalc=args.recalc, impute=args.use_cpt, optimized=args.optimized)
@@ -623,23 +635,32 @@ def main(args):
                 print_if(args.verbose, VERBOSE['program_progress'], f"using unreviewed entries for unresolved variants")
                 total_scores += calc_mutations_interface_scores(args, analyzer, use_alias=True, use_unreviewed=True)
             print_if(args.verbose, VERBOSE['program_progress'], f"done, scored {total_scores} of {n_muts} mutations")
-
         if action == 'rank-DS':
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating Dataset Rank values...")
-            return calc_mutations_dsrank(args)
+            calc_mutations_dsrank(args)
+            print_if(args.verbose, VERBOSE['program_progress'], f"done")
+        if action == 'rank-family-DS':
+            print_if(args.verbose, VERBOSE['program_progress'], f"Calculating Family Datasets Rank values...")
+            family_files_path = glob.glob(pjoin(FAMILY_SCORES_PATH, '*.csv'))
+            for path in tqdm.tqdm(family_files_path, total=len(family_files_path)):
+                family_name = os.path.basename(path)[:-4]
+                outpth = pjoin(FAMILY_SCORES_PATH, f"famrank_{family_name}.csv")
+                calc_mutations_dsrank(args, data_path=path, out_path=outpth, update_mut=False)
+            print_if(args.verbose, VERBOSE['program_progress'], f"done")
         if action == 'to-csv':
             print_if(args.verbose, VERBOSE['program_progress'], f"extracting scored to csv...")
             if args.family_summary:
-                family_files_path = glob.glob(pjoin(FAMILY_DATA_PATH, '.csv'))
-                for path in family_files_path:
-                    family_name = os.path.basename(path)[:-4]
+                family_files_path = glob.glob(pjoin(FAMILY_DATA_PATH, '*.csv'))
+                for path in tqdm.tqdm(family_files_path, total=len(family_files_path)):
+                    name = os.path.basename(path)[:-4]
                     family_data = pd.read_csv(path)
                     mutations = mutations_in_csv(family_data, args)
-                    outpth = pjoin(FAMILY_SCORES_PATH, f"scores_{family_name}.csv")
-                    to_csv(args.include_type, outpath=outpth, mutations=mutations)
+                    outpth = pjoin(FAMILY_SCORES_PATH, f"famrank_{name}.csv")
+                    to_csv(args.include_type, outpath=outpth, mutations=mutations, family_name=family_name)
             else:
                 to_csv(args.include_type, args.out_path)
             print_if(args.verbose, VERBOSE['program_progress'], f"done")
+
 
 if __name__ == "__main__":
     parser = create_parser()

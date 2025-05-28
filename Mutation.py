@@ -32,8 +32,9 @@ class Mutation:
         self._ref_sequences = None  # initialized only upon request
         self._manual_ref = None
         self._pdbs = None  # initialized only upon request
+        self._flag = None
         self._chr, self._start, self._end, self._orig_NA, self._change_NA = 0, 0, 0, None, None
-        self._families, self._patients = set(), set()
+        self._families, self._patients = set(), {}
 
         self._v = verbose_level
         if not protein or not full_desc:
@@ -109,7 +110,7 @@ class Mutation:
                 'change': self._change, 'location': self._loc, 'full_desc': self._full_desc,
                 'chr': self._chr, 'start': self._start, 'end': self._end,
                 'orig_NA': self._orig_NA, 'change_NA': self._change_NA, 'manual_ref': self._manual_ref,
-                'patients': self._patients, 'families': self._families}
+                'patients': self._patients, 'families': self._families, 'flag': self._flag}
         with open(path, "wb") as file:
             pickle.dump(data, file)
 
@@ -120,6 +121,7 @@ class Mutation:
                 self._symbol, self._orig, self._change, self._loc, self._full_desc, = \
                     data['name'], data['orig'], data['change'], data['location'], data['full_desc']
                 self._patients, self._families = data['patients'], data['families']
+                self._flag = data['flag']
                 # TODO give optional load for missing data
                 self._chr, self._start, self._end, self._orig_NA, self._change_NA = \
                     data['chr'], data['start'], data['end'], data['orig_NA'], data['change_NA']
@@ -200,25 +202,46 @@ class Mutation:
     def families(self):
         return self._families
 
-    @property
-    def patients(self):
-        return self._patients
+    def patients(self, family_name):
+        return self._patients[family_name]
 
-    def add_members(self, ids, add_to):
+    def add_family(self, ids):
         """
         adds members to families or patients
         :id: str | set
         :add_to: str in ['f' | 'p' | 'families' | 'patients']
         :return: None
         """
-        if add_to not in ['f', 'p', 'families', 'patients']:
-            raise TypeError
-        data = self._families if add_to in ['f', 'families'] else self._patients
         if isinstance(ids, str):
-            data.add(ids)
+            self._families.add(ids)
         elif isinstance(ids, set):
-            data |= ids
+            self._families |= ids
         self._save_obj(self._directory)
+
+    def add_patients(self, family_name, patients):
+        """
+        adds patients to families in which the mutation is present
+        overrides previous values
+        :family_name: str id of family to add members to
+        :patients: int | list either number of patients in family or list of patients
+        :return: None
+        """
+        if not isinstance(patients, (list, int)):
+            raise ValueError
+        self._patients[family_name] = patients
+        self._save_obj(self._directory)
+
+    @property
+    def flag(self):
+        return self._flag
+
+    @flag.setter
+    def flag(self, value):
+        if not isinstance(value, bool):
+            raise ValueError
+        self._flag = value
+        self._save_obj(self._directory)
+
 
     def set_ref_seqs_len(self, n):
         """
@@ -610,7 +633,7 @@ class Mutation:
         print(f"afm score:             {round(self.afm_score, 3)}")
         print(f"eve score & status:     {round(self.eve_score, 3)}, {self.eve_type}")
 
-    def scores_to_csv(self, include_status=False):
+    def scores_to_csv(self, include_status=False, family_name=''):
         """
         :param include_status: bool whether to include esm type and eve type
         :return: list of scores eve, esm, afm in csv format None will be rep;ace with 0 or -1
@@ -620,10 +643,15 @@ class Mutation:
         afm_score = self.afm_score if self.afm_score is not None else 0
         interface_score = self.interface_score if self.interface_score is not None else -1
         ds_rank = self.ds_rank if self.ds_rank is not None else -1
+        if family_name:
+            patients = self.patients(family_name)
+            intrafamily_count = patients if isinstance(patients, int) else len(patients)
+        else:
+            intrafamily_count = -1
         if include_status:
             return [self.protein_name, self.name, self.eve_score, self.eve_type, esm_score,
                     self.esm_type, esm3_score, self.esm3_type, afm_score, self.afm_type,
-                    interface_score, self.interface_type, ds_rank]
+                    interface_score, self.interface_type, intrafamily_count, len(self.families), ds_rank]
         else:
             return [self.protein_name, self.name, self.eve_score, esm_score, esm3_score, afm_score, interface_score,
-                    ds_rank]
+                    intrafamily_count, len(self.families), ds_rank]

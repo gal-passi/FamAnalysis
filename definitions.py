@@ -292,11 +292,8 @@ EVE_COL, EVE_TYPE_COL, ESM_COL, ESM_TYPE_COL, ESM3_COL, ESM3_TYPE_COL, AFM_COL, 
 INTERFACE_TYPE_COL, DS_COL = "eve", "eve_type", "esm1b", "esm1b_type", "esm3", "esm3_type", "afm", "afm_type", \
                              "inteface", "interface_type", "ds_rank"
 PROT_COL, MUT_COL = 'protein', 'variant'
+N_MEMBERS, N_FAMILIES = 'intra-family_recurrence', 'inter-family_recurrence'
 COLUMNS_W_STATUS = [PROT_COL, MUT_COL, EVE_COL, EVE_TYPE_COL, ESM_COL, ESM_TYPE_COL, ESM3_COL, ESM3_TYPE_COL,
-                    AFM_COL, AFM_TYPE_COL, INTERFACE_COL, INTERFACE_TYPE_COL, DS_COL]
-COLUMNS_NO_STATUS = [PROT_COL, MUT_COL, EVE_COL, ESM_COL, ESM3_COL, AFM_COL, INTERFACE_COL, DS_COL]
-
-#  FAMRANK
-
-FAMRANK_COLUMNS_W_STATUS = COLUMNS_W_STATUS + ['eve_top', 'esm_to', 'afm_top', 'top_by_two', 'top_by_three',
-                                               'intrafamily_recurrence', 'interfamily_recurrence', 'FamRank']
+                    AFM_COL, AFM_TYPE_COL, INTERFACE_COL, INTERFACE_TYPE_COL, N_MEMBERS, N_FAMILIES, DS_COL]
+COLUMNS_NO_STATUS = [PROT_COL, MUT_COL, EVE_COL, ESM_COL, ESM3_COL, AFM_COL, INTERFACE_COL, N_MEMBERS, N_FAMILIES,
+                     DS_COL]

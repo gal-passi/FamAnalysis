@@ -211,7 +211,7 @@ class Protein:
 
         isoforms = self._unip.fetch_uniport_sequences(self.Uid)
         alphafold_seq = self._unip.alpha_seq(self)
-        ncbi = {} if not self.ncbi_ids else entrez().fetch_NCBI_sequences(self.ncbi_ids)
+        ncbi = {} if not self._ncbi_ids else entrez().fetch_NCBI_sequences(self._ncbi_ids)
         isoforms = {**isoforms, **alphafold_seq, **ncbi}
         self.isoforms = isoforms
         with open(os.path.join(self.directory, self.ISOFORMS), "w") as file:
