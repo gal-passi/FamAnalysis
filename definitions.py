@@ -174,6 +174,8 @@ PROTEIN_ALIASES = {'LOC100287896': 'LIPT2', 'FPGT-TNNI3K': 'TNNI3K', 'ATPSJ2-PTC
                    'CBSL': 'CBS_HUMAN'}
 REMOVED_PROTEINS = ['LOC100996842', 'GLRA4', 'LOC390877', 'NM_001365196', 'LOC645188', 'COL4A2-AS2', 'PPP5D1',
                     'FTCD-AS1', 'C9orf62', 'LOC107986453']
+PROTEIN_NORMALIZED_RECURRENCE_THR = 250
+
 # free text no longer supported i.e. LRRK2:NM_198578.1:exon48:c.G7134C:p.K2378N
 PROTEIN_FREE_TEXT_INITIALIZATION_RE = rf'([A-Z\d]*):(NM_[\d]*)[\.]?[\d]*:'
 
@@ -181,10 +183,12 @@ PROTEIN_FREE_TEXT_INITIALIZATION_RE = rf'([A-Z\d]*):(NM_[\d]*)[\.]?[\d]*:'
 
 MUTATION_REGEX = rf'p\.(?P<symbol>(?P<orig>[{A_A}]){{1}}(?P<location>[\d]+)(?P<change>[{A_A}]){{1}})'
 REF_SEQ_PADDING = 5
+MAPPING_FLAG = 'flag'
 NEW_MUTATION_DATA = {'chr': None, 'ref_na': None, 'alt_na': None, 'start': None, 'end': None,
                      AFM_SCORE: NO_SCORE, AFM_TYPE: NO_TYPE, EVE_SCORE: NO_SCORE, ESM_SCORE: None, ESM_TYPE: NO_TYPE,
                      ESM3_SCORE: None, ESM3_TYPE: NO_TYPE, EVE_PREDICTION: NO_SCORE, EVE_TYPE: NO_TYPE,
-                     INTERFACE_SCORE: None, INTERFACE_TYPE: NO_TYPE, DS_RANK: None}
+                     INTERFACE_SCORE: None, INTERFACE_TYPE: NO_TYPE, DS_RANK: None, MAPPING_FLAG: None,
+                     'homozygot_flag': None, 'patients': {}, 'families': set()}
 #  PATIENTS AND FAMILY
 
 DEFAULT_PATIENT_COLUMNS = ['Chr', 'Start', 'End', 'Ref', 'Alt', 'Protein', 'Variant']
@@ -227,6 +231,8 @@ EVE_TRUNCATE_TAIL = 10
 EVE_SCORE_COLUMN = "EVE_scores_ASM"
 EVE_PREDICTION_COLUMN = "EVE_classes_75_pct_retained_ASM"
 EVE_MUTATION_COLUMN = 'mt_aa'
+EVE_WT_COLUMN = 'wt_aa'
+EVE_POSITION_COLUMN = 'position'
 
 CPT_DOWNLOAD_BASE = 'https://zenodo.org/records/7954657/files/'
 CPT_EVE_DATA = f'{CPT_DOWNLOAD_BASE}CPT1_score_EVE_set.zip?download=1'
@@ -292,8 +298,11 @@ EVE_COL, EVE_TYPE_COL, ESM_COL, ESM_TYPE_COL, ESM3_COL, ESM3_TYPE_COL, AFM_COL, 
 INTERFACE_TYPE_COL, DS_COL = "eve", "eve_type", "esm1b", "esm1b_type", "esm3", "esm3_type", "afm", "afm_type", \
                              "inteface", "interface_type", "ds_rank"
 PROT_COL, MUT_COL = 'protein', 'variant'
-N_MEMBERS, N_FAMILIES = 'intra-family_recurrence', 'inter-family_recurrence'
+N_MEMBERS, N_FAMILIES, NORMALIZED_PROTEIN_RECURRENCE = 'intra-family_recurrence', 'inter-family_recurrence', \
+                                                       'normalized_protein_recurrence_score'
+MAPPING_FLAG, HOMOZYGOT_FLAG = 'mapping_flag', 'is_homozygot'
 COLUMNS_W_STATUS = [PROT_COL, MUT_COL, EVE_COL, EVE_TYPE_COL, ESM_COL, ESM_TYPE_COL, ESM3_COL, ESM3_TYPE_COL,
-                    AFM_COL, AFM_TYPE_COL, INTERFACE_COL, INTERFACE_TYPE_COL, N_MEMBERS, N_FAMILIES, DS_COL]
+                    NORMALIZED_PROTEIN_RECURRENCE, AFM_COL, AFM_TYPE_COL, INTERFACE_COL, INTERFACE_TYPE_COL, N_MEMBERS, N_FAMILIES,
+                    MAPPING_FLAG, HOMOZYGOT_FLAG, DS_COL]
 COLUMNS_NO_STATUS = [PROT_COL, MUT_COL, EVE_COL, ESM_COL, ESM3_COL, AFM_COL, INTERFACE_COL, N_MEMBERS, N_FAMILIES,
-                     DS_COL]
+                     NORMALIZED_PROTEIN_RECURRENCE, MAPPING_FLAG, HOMOZYGOT_FLAG, DS_COL]

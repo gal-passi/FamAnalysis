@@ -54,7 +54,6 @@ def load_parquet_cached(csv_path, model):
 
 
 class ProteinAnalyzer:
-    INTERFACE = "/cs/staff/dina/utils/srcs/interface/interface"
     STRINGS_REVERSE_INDEX_ROOT = f"{ROOT}/DB/strings/strings_rindex.txt"
     PDBS_DB_ROOT = f"{ROOT}/DB/pdbs"
 
@@ -133,7 +132,7 @@ class ProteinAnalyzer:
         :return: (score, prediction) if not found (-1,-1)
         """
         search_name = protein.name if not prot_name else prot_name
-        #  Case 1: Protein reference in is directly found in eve records
+        #  Case 1: Protein reference is directly found in eve records
         if search_name in self.eve_records:
             res = self._eve_interperter(search_name, mutation, optimized)
             if res != (-1, -1):
@@ -166,17 +165,24 @@ class ProteinAnalyzer:
         :return: tuple (eve_score, -1 if not found, Eve_class 75% ASM prediction)
         """
         path = pjoin(EVE_VARIANTS_PATH, f"{prot_name}_HUMAN.csv")
-        if not os.path.exists(path):
+        if not os.path.exists(path) or mutation.changeAA not in VALID_AA:
             return -1, -1
         if optimized == 1:
             data = load_parquet_cached(path, 'EVE')
         else:
             data = pd.read_csv(path, low_memory=False).fillna(-1)
+        #  direct search first
+        idx_predictions = data[data[EVE_POSITION_COLUMN] == mutation.loc]
+        if len(idx_predictions) > 0 and idx_predictions[EVE_WT_COLUMN].unique()[0] == mutation.wt_aa:
+            eve_variant = idx_predictions[idx_predictions[EVE_MUTATION_COLUMN] == mutation.changeAA]
+            if pd.notna(eve_variant[EVE_SCORE_COLUMN].iloc[0]):
+                return eve_variant.iloc[0][EVE_SCORE_COLUMN], eve_variant.iloc[0][EVE_PREDICTION_COLUMN]
+        #  reference search
         references = mutation.ref_seqs.values()  # usually will be of size 1
         for reference in references:
             if len(reference) < REF_SEQ_PADDING * 2:  # skip if red seq is too short
                 continue
-            data_seq = ''.join(data["wt_aa"][0::20])
+            data_seq = ''.join(data[EVE_WT_COLUMN][0::20])
             seq_start = seacrh_by_ref_seq(data_seq, reference)
             if seq_start == -1:
                 continue
@@ -188,7 +194,8 @@ class ProteinAnalyzer:
                         f"error with EVE search by reference, in {mutation.long_name} skipping...")
                 continue
             else:
-                return eve_variant.iloc[0][EVE_SCORE_COLUMN], eve_variant.iloc[0][EVE_PREDICTION_COLUMN]
+                if pd.notna(eve_variant[EVE_SCORE_COLUMN].iloc[0]):
+                    return eve_variant.iloc[0][EVE_SCORE_COLUMN], eve_variant.iloc[0][EVE_PREDICTION_COLUMN]
         return -1, -1
 
     def score_mutation_eve_impute(self, mut, offset=0, gz=True, optimized=0):

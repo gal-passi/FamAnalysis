@@ -15,10 +15,10 @@ import click
 import re
 import tempfile
 from Bio import SeqIO
-from esm.models.esm3 import ESM3
-from esm.pretrained import ESM3_sm_open_v0
-from esm.sdk.api import ESM3InferenceClient
-from esm.tokenization.sequence_tokenizer import EsmSequenceTokenizer
+#from esm.models.esm3 import ESM3
+#from esm.pretrained import ESM3_sm_open_v0
+#from esm.sdk.api import ESM3InferenceClient
+#from esm.tokenization.sequence_tokenizer import EsmSequenceTokenizer
 from huggingface_hub import login
 
 

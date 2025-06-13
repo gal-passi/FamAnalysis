@@ -35,6 +35,7 @@ class Mutation:
         self._flag = None
         self._chr, self._start, self._end, self._orig_NA, self._change_NA = 0, 0, 0, None, None
         self._families, self._patients = set(), {}
+        self._homozygot_flag = None
 
         self._v = verbose_level
         if not protein or not full_desc:
@@ -110,7 +111,8 @@ class Mutation:
                 'change': self._change, 'location': self._loc, 'full_desc': self._full_desc,
                 'chr': self._chr, 'start': self._start, 'end': self._end,
                 'orig_NA': self._orig_NA, 'change_NA': self._change_NA, 'manual_ref': self._manual_ref,
-                'patients': self._patients, 'families': self._families, 'flag': self._flag}
+                'patients': self._patients, 'families': self._families, 'flag': self._flag,
+                'homozygot_flag': self._homozygot_flag}
         with open(path, "wb") as file:
             pickle.dump(data, file)
 
@@ -122,6 +124,7 @@ class Mutation:
                     data['name'], data['orig'], data['change'], data['location'], data['full_desc']
                 self._patients, self._families = data['patients'], data['families']
                 self._flag = data['flag']
+                self._homozygot_flag = data['homozygot_flag']
                 # TODO give optional load for missing data
                 self._chr, self._start, self._end, self._orig_NA, self._change_NA = \
                     data['chr'], data['start'], data['end'], data['orig_NA'], data['change_NA']
@@ -167,6 +170,14 @@ class Mutation:
 
     @property
     def origAA(self):
+        return self._orig
+
+    @property
+    def wtAA(self):
+        return self._orig
+
+    @property
+    def wt_aa(self):
         return self._orig
 
     @property
@@ -242,6 +253,16 @@ class Mutation:
         self._flag = value
         self._save_obj(self._directory)
 
+    @property
+    def homozygot(self):
+        return self._homozygot_flag
+
+    @homozygot.setter
+    def homozygot(self, value):
+        if not isinstance(value, bool):
+            raise ValueError
+        self._homozygot_flag = value
+        self._save_obj(self._directory)
 
     def set_ref_seqs_len(self, n):
         """
@@ -369,6 +390,12 @@ class Mutation:
             warn_if(self._v, VERBOSE['raw_warnings'], f"\n{self._protein.muts}")
             return None
 
+    @esm_score.setter
+    def esm_score(self, value):
+        if not isinstance(value, float):
+            raise ValueError
+        self.update_score('ESM', value)
+
     @property
     def esm3_score(self):
         try:
@@ -392,6 +419,12 @@ class Mutation:
             warn_if(self._v, VERBOSE['raw_warnings'], f"\n{self._protein.muts}")
             return None
 
+    @interface_score.setter
+    def interface_score(self, value):
+        if not isinstance(value, (int, float)):
+            raise ValueError
+        self.update_score('INTERFACE', value)
+
     @property
     def has_esm(self):
         return self.esm_score is not None
@@ -410,6 +443,12 @@ class Mutation:
             warn_if(self._v, VERBOSE['raw_warnings'], f"\n{self._protein.muts}")
             return -1
 
+    @eve_score.setter
+    def eve_score(self, value):
+        if not isinstance(value, float):
+            raise ValueError
+        self.update_score('EVE', value)
+
     @property
     def has_eve(self):
         return self.eve_score not in [None, -1]
@@ -417,6 +456,12 @@ class Mutation:
     @property
     def afm_score(self):
         return self._protein.muts[self.extended_description][AFM_SCORE]
+
+    @afm_score.setter
+    def afm_score(self, value):
+        if not isinstance(value, float):
+            raise ValueError
+        self.update_score('AFM', value)
 
     @property
     def has_afm(self):
@@ -434,9 +479,21 @@ class Mutation:
     def eve_type(self):
         return self._protein.muts[self.extended_description][EVE_TYPE]
 
+    @eve_type.setter
+    def eve_type(self, value):
+        if not isinstance(value, str):
+            raise ValueError
+        self.update_score('EVE', self.eve_score, eve_type=value)
+
     @property
     def esm_type(self):
         return self._protein.muts[self.extended_description][ESM_TYPE]
+
+    @esm_type.setter
+    def esm_type(self, value):
+        if not isinstance(value, str):
+            raise ValueError
+        self.update_score('ESM', self.esm_score, esm_type=value)
 
     @property
     def esm3_type(self):
@@ -448,6 +505,12 @@ class Mutation:
     @property
     def afm_type(self):
         return self._protein.muts[self.extended_description][AFM_TYPE]
+
+    @afm_type.setter
+    def afm_type(self, value):
+        if not isinstance(value, str):
+            raise ValueError
+        self.update_score('AFM', self.afm_score, afm_type=value)
 
     @property
     def interface_type(self):
@@ -601,8 +664,8 @@ class Mutation:
             prot.muts[self.extended_description][MODELS_SCORES['AFM_METHOD']] = afm_type
         if model == 'INTERFACE':
             prot.muts[self.extended_description][MODELS_SCORES['INTERFACE_METHOD']] = NUM_TO_SOURCE[score]
-
         prot._update_DB(pjoin(prot.directory, prot.MUTS), prot.muts, mode='pickle')
+
 
     def esm_scores_from_inference(self, how='all'):
         """
@@ -648,10 +711,12 @@ class Mutation:
             intrafamily_count = patients if isinstance(patients, int) else len(patients)
         else:
             intrafamily_count = -1
+        norm_prot_recurrence = self.protein.normalized_recurrence()
         if include_status:
             return [self.protein_name, self.name, self.eve_score, self.eve_type, esm_score,
                     self.esm_type, esm3_score, self.esm3_type, afm_score, self.afm_type,
-                    interface_score, self.interface_type, intrafamily_count, len(self.families), ds_rank]
+                    interface_score, self.interface_type, intrafamily_count, len(self.families), norm_prot_recurrence,
+                    self.homozygot, self.flag, ds_rank]
         else:
             return [self.protein_name, self.name, self.eve_score, esm_score, esm3_score, afm_score, interface_score,
-                    intrafamily_count, len(self.families), ds_rank]
+                    intrafamily_count, len(self.families), norm_prot_recurrence, self.homozygot, self.flag, ds_rank]

@@ -28,6 +28,8 @@ def all_proteins():
     """
     for path in glob.glob(os.path.join(PROTEIN_PATH, '*')):
         prot_name = os.path.basename(path)
+        if prot_name in REMOVED_PROTEINS:
+            continue
         yield Protein(ref_name=prot_name)
 
 
@@ -54,7 +56,7 @@ def create_parser():
         "--action",
         type=str,
         choices=["init-DB", "update-DB", "delete-DB", "score-ESM", "score-ESM3",  "score-EVE", "score-AFM", "rank-DS",
-                 "rank-family-DS", "to-csv", 'score-INTERFACE'],
+                 "rank-family-DS", "to-csv", 'score-INTERFACE', 'score-PIONEER'],
         default="init-DB",
         help="init-DB: initialize project database according to the supplied csv file\n"
              "score-[model]: calculate [model] scores for all missense variants in DB\n"
@@ -626,7 +628,7 @@ def main(args):
                         print(f"Task ID {args.task_id} exceeds available protein count ({len(proteins)}). Skipping.")
             else:
                 calc_mutations_esm3_scores(args, analyzer, recalc=args.recalc)
-        if action == 'score-INTERFACE':
+        if action in ['score-INTERFACE', 'score-PIONEER']:
             if args.recalc:
                 erase_mutations_scores('INTERFACE')
             print_if(args.verbose, VERBOSE['program_progress'], f"Calculating interface scores...")

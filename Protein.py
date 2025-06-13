@@ -7,9 +7,9 @@ import Mutation
 from Connections import Uniport
 from Connections import EntrezApi as entrez
 from definitions import *
+from definitions import *
 from utils import print_if, warn_if
 from copy import deepcopy
-
 
 class Protein:
     """
@@ -65,6 +65,20 @@ class Protein:
             raise NotImplementedError
         return self.name == other.name
 
+    def __len__(self):
+        if not self.isoforms:
+            return 0
+        else:
+            return len(list(self.isoforms.values())[0])
+
+    def normalized_recurrence(self, exclude_thr=PROTEIN_NORMALIZED_RECURRENCE_THR):
+        if exclude_thr is not None and len(self) < exclude_thr:
+            return -1
+        families = set()
+        for mut in self.generate_mutations():
+            families |= mut.families
+        return float(len(families)) / len(self)
+
     def reload(self):
         """
         reload object from memory
@@ -91,6 +105,8 @@ class Protein:
         :return:
         """
         for mut_desc in self.mutations:
+            if mut_desc[-1] not in VALID_AA:
+                continue
             yield Mutation.Mutation(mut_desc, self)
 
     @property
